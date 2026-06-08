@@ -39,3 +39,8 @@ Thumbs.db
 captures/
 .externalNativeBuild/
 .cxx/
+
+# Release signing (keep secret, never commit)
+keystore.properties
+*.jks
+*.keystore
