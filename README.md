@@ -1,6 +1,6 @@
 # Eeter
 
-Eeter is an Android internet‑radio app for Estonian stations, built with Kotlin and Jetpack Compose. It's a clean‑room reimplementation of the original **eeRaadio** app: a full‑screen swipeable player, a browsable station list, an equalizer, and full **Android Auto** support.
+Eeter is an Android internet‑radio app for Estonian stations, built with Kotlin and Jetpack Compose. It's a clean‑room implementation: a full‑screen swipeable player, a browsable station list, an equalizer, and full **Android Auto** support.
 
 > Personal project. Station names, logos and audio streams belong to their respective broadcasters (see [Disclaimer](#disclaimer)).
 
