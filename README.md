@@ -4,6 +4,8 @@ Eeter is an Android internet‑radio app for Estonian stations, built with Kotli
 
 > Personal project. Station names, logos and audio streams belong to their respective broadcasters (see [Disclaimer](#disclaimer)).
 
+📥 **[Download the latest APK](https://github.com/oliver1264/Eeter/releases/latest)** — requires Android 8.0+ (you may need to allow installing from unknown sources).
+
 ## Screenshots
 
 | Player | Stations | Equalizer | Settings |
