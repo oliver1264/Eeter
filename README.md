@@ -74,6 +74,26 @@ Requirements: Android Studio (recent), JDK 17, Android SDK 34.
 
 The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
+## Releasing
+
+Releases are built and published automatically by GitHub Actions
+([`.github/workflows/release.yml`](.github/workflows/release.yml)) whenever a
+version tag is pushed:
+
+1. Bump `versionCode` / `versionName` in `app/build.gradle.kts`.
+2. Commit, then tag and push:
+   ```bash
+   git tag v2.8
+   git push origin v2.8
+   ```
+
+The workflow builds a **signed** release APK and attaches it to a new GitHub
+Release. Signing uses a keystore stored as encrypted repository secrets
+(`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`).
+
+For a local signed build, keep `eeter-release.jks` and `keystore.properties`
+(both gitignored) in the project root and run `./gradlew assembleRelease`.
+
 ## License
 
 Released under the [MIT License](LICENSE). Note that the license covers the
