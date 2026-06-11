@@ -2,6 +2,12 @@
 
 All notable changes to Eeter are documented here.
 
+## v3.2 — 2026-06-11
+
+- The landscape volume bar now also appears automatically when the volume
+  is changed with hardware controls (knob / steering wheel / buttons), not
+  only via the on-screen volume button. Same 5-second auto-hide.
+
 ## v3.1 — 2026-06-11
 
 - Volume control on the landscape grid screen: a volume button in the top

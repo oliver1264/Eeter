@@ -566,14 +566,23 @@ private fun StationGridScreen(
     onClose: () -> Unit,
     onTile: (Station) -> Unit,
 ) {
-    // Volume bar overlay: shown by the top-bar volume button, hides 5 s after
-    // the last interaction (each slider touch bumps volumeTouch to restart it).
+    // Volume bar overlay: shown by the top-bar volume button or by any volume
+    // change (hardware knob/buttons), hides 5 s after the last interaction
+    // (each slider touch bumps volumeTouch to restart the timer).
+    val vol = rememberSystemVolume()
     var showVolume by remember { mutableStateOf(false) }
     var volumeTouch by remember { mutableIntStateOf(0) }
     LaunchedEffect(showVolume, volumeTouch) {
         if (showVolume) {
             delay(5_000)
             showVolume = false
+        }
+    }
+    // drop(1) skips the initial value so the bar doesn't flash on screen entry.
+    LaunchedEffect(Unit) {
+        snapshotFlow { vol.volume }.drop(1).collect {
+            showVolume = true
+            volumeTouch++
         }
     }
 
@@ -656,6 +665,7 @@ private fun StationGridScreen(
 
         if (showVolume) {
             VolumeOverlay(
+                vol = vol,
                 onInteract = { volumeTouch++ },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp),
             )
@@ -665,8 +675,7 @@ private fun StationGridScreen(
 
 /** Floating volume bar: icon + slider + percentage, on a translucent pill. */
 @Composable
-private fun VolumeOverlay(onInteract: () -> Unit, modifier: Modifier = Modifier) {
-    val vol = rememberSystemVolume()
+private fun VolumeOverlay(vol: VolumeState, onInteract: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier
             .fillMaxWidth(0.55f)
