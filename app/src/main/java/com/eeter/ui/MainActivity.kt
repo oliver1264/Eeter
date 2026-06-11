@@ -46,6 +46,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Favorite
@@ -56,7 +57,6 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -121,6 +121,7 @@ import com.eeter.playback.MediaItems
 import com.eeter.playback.PlaybackService
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -565,9 +566,20 @@ private fun StationGridScreen(
     onClose: () -> Unit,
     onTile: (Station) -> Unit,
 ) {
+    // Volume bar overlay: shown by the top-bar volume button, hides 5 s after
+    // the last interaction (each slider touch bumps volumeTouch to restart it).
+    var showVolume by remember { mutableStateOf(false) }
+    var volumeTouch by remember { mutableIntStateOf(0) }
+    LaunchedEffect(showVolume, volumeTouch) {
+        if (showVolume) {
+            delay(5_000)
+            showVolume = false
+        }
+    }
+
     Box(Modifier.fillMaxSize().background(DrawerColor)) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
-            // Top bar: hamburger + now-playing marquee + overflow menu.
+            // Top bar: hamburger + now-playing marquee + volume + overflow menu.
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -584,6 +596,9 @@ private fun StationGridScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f).padding(horizontal = 12.dp).basicMarquee(),
                 )
+                IconButton(onClick = { showVolume = !showVolume }) {
+                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Volume", tint = Color.White)
+                }
                 OverflowMenu(tint = Color.White, onEqualizer = onOpenEq, onSettings = onOpenSettings, onClose = onClose)
             }
 
@@ -638,6 +653,56 @@ private fun StationGridScreen(
                 }
             }
         }
+
+        if (showVolume) {
+            VolumeOverlay(
+                onInteract = { volumeTouch++ },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp),
+            )
+        }
+    }
+}
+
+/** Floating volume bar: icon + slider + percentage, on a translucent pill. */
+@Composable
+private fun VolumeOverlay(onInteract: () -> Unit, modifier: Modifier = Modifier) {
+    val vol = rememberSystemVolume()
+    Row(
+        modifier
+            .fillMaxWidth(0.55f)
+            .clip(RoundedCornerShape(28.dp))
+            .background(TileColor.copy(alpha = 0.95f))
+            .padding(horizontal = 20.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.AutoMirrored.Filled.VolumeUp,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.85f),
+            modifier = Modifier.size(22.dp),
+        )
+        Slider(
+            value = vol.volume.toFloat(),
+            onValueChange = {
+                vol.set(it.toInt())
+                onInteract()
+            },
+            valueRange = 0f..vol.max.toFloat(),
+            colors = SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = Color.White,
+                inactiveTrackColor = Color.White.copy(alpha = 0.3f),
+            ),
+            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+        )
+        Text(
+            text = "${vol.volume * 100 / vol.max}%",
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            modifier = Modifier.width(44.dp),
+            textAlign = TextAlign.End,
+        )
     }
 }
 
@@ -697,23 +762,42 @@ private fun OverflowMenu(tint: Color, onEqualizer: () -> Unit, onSettings: () ->
     }
 }
 
+/** System media volume mirrored into Compose state, with a setter. */
+private class VolumeState(val max: Int, initial: Int, private val audio: AudioManager) {
+    var volume by mutableIntStateOf(initial)
+    fun set(v: Int) {
+        volume = v.coerceIn(0, max)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
+    }
+}
+
+/** Tracks the system media volume (kept in sync with hardware buttons, etc.). */
 @Composable
-private fun ControlPanel(panel: Color, onBrand: Color, isFavorite: Boolean, onToggleFav: () -> Unit) {
+private fun rememberSystemVolume(): VolumeState {
     val context = LocalContext.current
     val audio = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
-    val maxVol = remember { audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
-    var volume by remember { mutableIntStateOf(audio.getStreamVolume(AudioManager.STREAM_MUSIC)) }
-
-    // Keep the slider in sync with the system volume (hardware buttons, etc.).
+    val state = remember {
+        VolumeState(
+            max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1),
+            initial = audio.getStreamVolume(AudioManager.STREAM_MUSIC),
+            audio = audio,
+        )
+    }
     DisposableEffect(Unit) {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+                state.volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
             }
         }
         context.contentResolver.registerContentObserver(Settings.System.CONTENT_URI, true, observer)
         onDispose { context.contentResolver.unregisterContentObserver(observer) }
     }
+    return state
+}
+
+@Composable
+private fun ControlPanel(panel: Color, onBrand: Color, isFavorite: Boolean, onToggleFav: () -> Unit) {
+    val vol = rememberSystemVolume()
 
     Column(
         Modifier.fillMaxWidth().background(panel).padding(horizontal = 24.dp, vertical = 16.dp),
@@ -728,14 +812,11 @@ private fun ControlPanel(panel: Color, onBrand: Color, isFavorite: Boolean, onTo
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.VolumeUp, contentDescription = null, tint = onBrand.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
+            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = onBrand.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
             Slider(
-                value = volume.toFloat(),
-                onValueChange = {
-                    volume = it.toInt()
-                    audio.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
-                },
-                valueRange = 0f..maxVol.toFloat(),
+                value = vol.volume.toFloat(),
+                onValueChange = { vol.set(it.toInt()) },
+                valueRange = 0f..vol.max.toFloat(),
                 colors = SliderDefaults.colors(
                     thumbColor = onBrand,
                     activeTrackColor = onBrand,

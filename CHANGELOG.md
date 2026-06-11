@@ -2,6 +2,13 @@
 
 All notable changes to Eeter are documented here.
 
+## v3.1 — 2026-06-11
+
+- Volume control on the landscape grid screen: a volume button in the top
+  bar pops up a floating volume bar (slider + percentage indicator) that
+  hides automatically 5 seconds after the last touch. Stays in sync with
+  the hardware volume buttons.
+
 ## v3.0 — 2026-06-11
 
 - Landscape favorites grid now paginates instead of scrolling: 12 stations
