@@ -2,6 +2,14 @@
 
 All notable changes to Eeter are documented here.
 
+## v3.3 — 2026-06-11
+
+- Volume bar now appears on head units whose physical volume knob changes
+  the volume through the MCU without persisting it to Android settings
+  (e.g. Android 14 units on A_OS_P firmware): volume changes are now also
+  detected via the system volume-changed broadcast plus a 0.5 s fallback
+  poll, instead of relying only on the settings observer.
+
 ## v3.2 — 2026-06-11
 
 - The landscape volume bar now also appears automatically when the volume

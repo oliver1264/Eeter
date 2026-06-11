@@ -1,8 +1,11 @@
 package com.eeter.ui
 
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.database.ContentObserver
 import android.graphics.drawable.BitmapDrawable
 import android.media.AudioManager
@@ -800,6 +803,32 @@ private fun rememberSystemVolume(): VolumeState {
         }
         context.contentResolver.registerContentObserver(Settings.System.CONTENT_URI, true, observer)
         onDispose { context.contentResolver.unregisterContentObserver(observer) }
+    }
+    // Some head-unit ROMs (e.g. MCU-driven volume knobs) change the stream volume
+    // without persisting it to Settings.System, so the ContentObserver never fires.
+    // Also listen for the system volume-changed broadcast...
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, intent: Intent?) {
+                state.volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+            }
+        }
+        val filter = IntentFilter("android.media.VOLUME_CHANGED_ACTION")
+        if (Build.VERSION.SDK_INT >= 33) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            context.registerReceiver(receiver, filter)
+        }
+        onDispose { context.unregisterReceiver(receiver) }
+    }
+    // ...and poll as a catch-all: if the stream volume changed by any path at all,
+    // the state updates within half a second.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(500)
+            state.volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        }
     }
     return state
 }
