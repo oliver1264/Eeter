@@ -22,8 +22,8 @@ android {
         applicationId = "com.eeter"
         minSdk = 26
         targetSdk = 34
-        versionCode = 18
-        versionName = "2.7"
+        versionCode = 21
+        versionName = "3.0"
     }
 
     signingConfigs {

@@ -19,6 +19,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -90,6 +92,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -380,6 +383,33 @@ private fun AppScreen(
             )
         },
     ) {
+        // Wide/landscape displays (e.g. 1920x720 car head units) get a grid of big
+        // logo tiles instead of the swipe player: tap plays, the view stays put.
+        val config = LocalConfiguration.current
+        if (config.screenWidthDp > config.screenHeightDp) {
+            StationGridScreen(
+                favorites = favorites,
+                currentId = currentId,
+                isPlaying = isPlaying,
+                statusLine = if (currentId != null) nowPlayingLine(nowTitle, nowArtist) else null,
+                onMenu = { scope.launch { drawerState.open() } },
+                onOpenEq = { showEq = true },
+                onOpenSettings = { showSettings = true },
+                onClose = onClose,
+                onTile = { s ->
+                    val c = controller
+                    val isCurrent = currentId == MediaItems.stationMediaId(s.id)
+                    if (isCurrent && c != null) {
+                        if (c.isPlaying) c.pause() else c.play()
+                    } else {
+                        navAll = false
+                        selected = s
+                        onPlay(s, false)
+                    }
+                },
+            )
+            return@ModalNavigationDrawer
+        }
         if (pages.isEmpty()) {
             Box(Modifier.fillMaxSize().background(DefaultBrand))
             return@ModalNavigationDrawer
@@ -509,6 +539,145 @@ private fun PlayerScreen(
             )
 
             ControlPanel(panel = panel, onBrand = onBrand, isFavorite = isFavorite, onToggleFav = onToggleFav)
+        }
+    }
+}
+
+/** Tile background/highlight for the landscape favorites grid. */
+private val TileColor = Color(0xFF12263F)
+
+/**
+ * Landscape favorites grid for wide displays (car head units): 4 columns x 3 rows
+ * of big logo buttons. Tapping a tile plays that station without leaving the grid;
+ * tapping the playing tile toggles pause. With >12 favorites the grid paginates:
+ * swipe left/right between pages (indicator dots at the bottom).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StationGridScreen(
+    favorites: List<Station>,
+    currentId: String?,
+    isPlaying: Boolean,
+    statusLine: String?,
+    onMenu: () -> Unit,
+    onOpenEq: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onClose: () -> Unit,
+    onTile: (Station) -> Unit,
+) {
+    Box(Modifier.fillMaxSize().background(DrawerColor)) {
+        Column(Modifier.fillMaxSize().systemBarsPadding()) {
+            // Top bar: hamburger + now-playing marquee + overflow menu.
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onMenu) {
+                    Icon(Icons.Filled.Menu, contentDescription = "Menu", tint = Color.White)
+                }
+                Text(
+                    text = statusLine ?: "",
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp).basicMarquee(),
+                )
+                OverflowMenu(tint = Color.White, onEqualizer = onOpenEq, onSettings = onOpenSettings, onClose = onClose)
+            }
+
+            // 12 tiles (4x3) per page; extra favorites go onto further swipe pages.
+            val gridPages = remember(favorites) { favorites.chunked(12) }
+            val gridPager = rememberPagerState(pageCount = { gridPages.size })
+            val spacing = 10.dp
+            HorizontalPager(state = gridPager, modifier = Modifier.weight(1f).fillMaxWidth()) { p ->
+                val stations = gridPages[p]
+                Column(
+                    Modifier.fillMaxSize().padding(spacing),
+                    verticalArrangement = Arrangement.spacedBy(spacing),
+                ) {
+                    for (row in 0 until 3) {
+                        Row(
+                            Modifier.weight(1f).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(spacing),
+                        ) {
+                            for (col in 0 until 4) {
+                                val s = stations.getOrNull(row * 4 + col)
+                                if (s != null) {
+                                    val isCurrent = currentId == MediaItems.stationMediaId(s.id)
+                                    StationTile(
+                                        station = s,
+                                        highlighted = isCurrent && isPlaying,
+                                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                                        onClick = { onTile(s) },
+                                    )
+                                } else {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Page indicator dots (only when there is more than one page).
+            if (gridPages.size > 1) {
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    repeat(gridPages.size) { i ->
+                        Box(
+                            Modifier.padding(horizontal = 4.dp).size(8.dp).clip(CircleShape)
+                                .background(
+                                    if (i == gridPager.currentPage) Color.White
+                                    else Color.White.copy(alpha = 0.35f)
+                                ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StationTile(
+    station: Station,
+    highlighted: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        modifier
+            .clip(shape)
+            .background(TileColor)
+            .then(
+                if (highlighted) Modifier.border(3.dp, Color.White.copy(alpha = 0.9f), shape)
+                else Modifier
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (station.logoRes != 0) {
+            AsyncImage(
+                model = station.logoRes,
+                contentDescription = displayName(station.name),
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().padding(14.dp),
+            )
+        } else {
+            Text(
+                text = displayName(station.name),
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 10.dp),
+            )
         }
     }
 }
