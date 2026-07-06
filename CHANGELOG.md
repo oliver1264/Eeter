@@ -2,6 +2,14 @@
 
 All notable changes to Eeter are documented here.
 
+## v3.7 — 2026-07-06
+
+- Station tiles restyled to the Spotify-like reference design (app_icons.jpg
+  on Drive): each station is now a square rounded artwork card with the
+  station name below it in gray, and the current song as a smaller second
+  line under the name. Previously the song line sat inside the tile and the
+  card stretched to fill the whole grid cell.
+
 ## v3.6 — 2026-07-06
 
 - Star FM now shows the CORRECT station's artist/track. tv3's now-playing

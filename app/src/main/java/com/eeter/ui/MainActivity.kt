@@ -26,6 +26,7 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -793,48 +794,64 @@ private fun StationTile(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    // Spotify-style tile: square artwork card with the captions below it,
+    // on the page background (per the app_icons.jpg reference design).
+    val shape = RoundedCornerShape(12.dp)
     Column(
-        modifier
-            .clip(shape)
-            .background(TileColor)
-            .then(
-                if (highlighted) Modifier.border(3.dp, Color.White.copy(alpha = 0.9f), shape)
-                else Modifier
-            )
-            .clickable(onClick = onClick)
-            .padding(bottom = 6.dp),
+        modifier.clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .weight(1f)
+                .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                .clip(shape)
+                .background(TileColor)
+                .then(
+                    if (highlighted) Modifier.border(3.dp, Color.White.copy(alpha = 0.9f), shape)
+                    else Modifier
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
             if (station.logoRes != 0) {
                 AsyncImage(
                     model = station.logoRes,
                     contentDescription = displayName(station.name),
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier.fillMaxSize().padding(10.dp),
                 )
             } else {
                 Text(
                     text = displayName(station.name),
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
+                    fontSize = 16.sp,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp),
                 )
             }
         }
-        // Current song under the logo (empty placeholder keeps the logos aligned).
+        // Station name under the card, like the playlist titles in the reference.
+        Text(
+            text = displayName(station.name),
+            color = Color.White.copy(alpha = if (highlighted) 0.95f else 0.7f),
+            fontWeight = FontWeight.Medium,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 5.dp, start = 4.dp, end = 4.dp),
+        )
+        // Current song as a dimmer second line (empty placeholder keeps rows aligned).
         Text(
             text = line ?: "",
-            color = Color.White.copy(alpha = 0.75f),
-            fontSize = 12.sp,
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
             maxLines = 1,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).basicMarquee(),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).basicMarquee(),
         )
     }
 }
