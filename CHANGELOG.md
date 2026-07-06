@@ -2,6 +2,13 @@
 
 All notable changes to Eeter are documented here.
 
+## v3.9 — 2026-07-06
+
+- Artist – track line under each tile is now full white (was 50% gray).
+- Bigger station buttons: grid spacing tightened (10 → 6 dp), caption gap
+  reduced, and the logo's padding inside the card halved so the artwork
+  fills more of the tile.
+
 ## v3.8 — 2026-07-06
 
 - Station grid page background is now pure black (was dark navy); the

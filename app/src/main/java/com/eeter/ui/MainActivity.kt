@@ -685,7 +685,7 @@ private fun StationGridScreen(
                 }
             }
 
-            val spacing = 10.dp
+            val spacing = 6.dp
             HorizontalPager(state = gridPager, modifier = Modifier.weight(1f).fillMaxWidth()) { p ->
                 val stations = gridPages[p]
                 Column(
@@ -819,7 +819,7 @@ private fun StationTile(
                     model = station.logoRes,
                     contentDescription = displayName(station.name),
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().padding(10.dp),
+                    modifier = Modifier.fillMaxSize().padding(6.dp),
                 )
             } else {
                 Text(
@@ -843,12 +843,12 @@ private fun StationTile(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 5.dp, start = 4.dp, end = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp, start = 4.dp, end = 4.dp),
         )
-        // Current song as a dimmer second line (empty placeholder keeps rows aligned).
+        // Current song in full white under the name (empty placeholder keeps rows aligned).
         Text(
             text = line ?: "",
-            color = Color.White.copy(alpha = 0.5f),
+            color = Color.White,
             fontSize = 11.sp,
             maxLines = 1,
             textAlign = TextAlign.Center,
