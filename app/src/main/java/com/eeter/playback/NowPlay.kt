@@ -21,7 +21,9 @@ import java.util.zip.GZIPInputStream
  * via [onUpdate] on the main thread.
  *
  * Kotlin reimplementation of the old `ya.NowPlay` smali patch.
- * kind: 1 = Star FM, 2 = Power Hit Radio, 3 = Sky Plus DnB, 4 = Star FM Plus.
+ * kind: 1 = Star FM, 2 = Power Hit Radio, 3 = Sky Plus DnB, 4 = Star FM Plus,
+ * 5 = Sky Plus (moved here in v4.1 — its stream started sending an empty
+ * StreamTitle, same failure as Star FM's).
  * (Star FM / Star FM Plus moved here in v3.5: their Icecast streams started
  * sending an empty StreamTitle, so ICY metadata no longer works for them.
  * Their get_onair_data AJAX endpoint serves Star FM EESTI's feed for the main
@@ -35,7 +37,7 @@ class NowPlay(private val onUpdate: (artist: String, title: String) -> Unit) {
 
     fun start(kind: Int) {
         stop()
-        if (kind !in 1..4) return
+        if (kind !in 1..5) return
         job = scope.launch {
             delay(2000)
             while (isActive) {
@@ -64,8 +66,9 @@ class NowPlay(private val onUpdate: (artist: String, title: String) -> Unit) {
     fun fetchWeb(kind: Int): String? = when (kind) {
         1 -> scrapeOnAir("https://raadiod.tv3.ee/starfm/")
         4 -> scrapeOnAir("https://raadiod.tv3.ee/starfmplus/")
-        3 -> {
-            val o = JSONObject(httpGet("https://skyplus.sky.ee/api/radio-stations/2/now-playing"))
+        3, 5 -> {
+            val skyId = if (kind == 3) 2 else 1
+            val o = JSONObject(httpGet("https://skyplus.sky.ee/api/radio-stations/$skyId/now-playing"))
             combine(o.optString("artist"), o.optString("title"))
         }
         else -> {

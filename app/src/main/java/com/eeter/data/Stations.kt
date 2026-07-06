@@ -2,7 +2,7 @@ package com.eeter.data
 
 import com.eeter.R
 
-/** Auto-generated from the recovered station list. nowPlayingKind: 1=Star FM, 2=Power Hit, 3=Sky Plus DnB, 4=Star FM Plus (web-API now-playing; their streams carry no ICY song titles). */
+/** Auto-generated from the recovered station list. nowPlayingKind: 1=Star FM, 2=Power Hit, 3=Sky Plus DnB, 4=Star FM Plus, 5=Sky Plus (web-API now-playing; their streams carry no ICY song titles). */
 data class Station(
     val id: Int,
     val name: String,
@@ -91,7 +91,7 @@ object Stations {
         Station(82, "ROCK FM Metal", "https://stream.skymedia.ee/live/rckmetal", "https://stream.skymedia.ee/live/rckmetal", "https://sky.ee/tag/rockfm/", R.drawable.rockfmmetal_logo, 0),
         Station(84, "Russkoe Radio - Rock", "https://edge05.cdn.bitflip.ee:8888/rrock", "https://edge05.cdn.bitflip.ee:8888/rrock", "https://www.russkoeradio.fm", R.drawable.russkoeradio_logo, 0),
         Station(85, "Semeinoje Radio", "https://icecast.pereraadio.ee:9000/Semeinoje", "https://icecast.pereraadio.ee:9000/Semeinoje", "https://www.pereraadio.ee/", R.drawable.pereraadio_logo, 0),
-        Station(86, "Sky Plus", "https://stream.skymedia.ee/live/SKYPLUS", "https://stream.skymedia.ee/live/SKYPLUS", "https://sky.ee/", R.drawable.sky_plus_logo, 0),
+        Station(86, "Sky Plus", "https://stream.skymedia.ee/live/SKYPLUS", "https://stream.skymedia.ee/live/SKYPLUS", "https://sky.ee/", R.drawable.sky_plus_logo, 5),
         Station(87, "Sky Plus DnB", "https://stream.skymedia.ee/live/NRJdnb", "https://stream.skymedia.ee/live/NRJdnb", "https://sky.ee/", R.drawable.skyplusdnb_logo, 3),
         Station(90, "SKY Radio", "https://stream.skymedia.ee/live/SKY", "https://stream.skymedia.ee/live/SKY", "http://www.sky-radio.fm/", R.drawable.skyradio_logo, 0),
         Station(93, "Sooviraadio", "http://media.uunox.net:8888/;", "http://media.uunox.net:8888/;", "http://sooviraadio.net/raadio/", R.drawable.sooviraadio_logo, 0),

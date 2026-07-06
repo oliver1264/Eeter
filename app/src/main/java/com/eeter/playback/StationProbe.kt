@@ -8,7 +8,7 @@ import java.net.URL
  * One-shot "now playing" lookup for stations that are NOT currently being played,
  * used by the landscape grid to caption every tile with its current song.
  *
- * Stations with a web API (nowPlayingKind 1..3) are asked there. Everything else
+ * Stations with a web API (nowPlayingKind 1..5) are asked there. Everything else
  * gets an ICY metadata probe: connect with `Icy-MetaData: 1`, skip one audio block
  * (`icy-metaint` bytes, typically 16 KB), read the first metadata block and pull
  * `StreamTitle` out of it. Costs one short stream connection per call.
@@ -16,7 +16,7 @@ import java.net.URL
 object StationProbe {
 
     fun nowPlaying(station: Station): String? =
-        if (station.nowPlayingKind in 1..4) NowPlay.fetchWeb(station.nowPlayingKind)
+        if (station.nowPlayingKind in 1..5) NowPlay.fetchWeb(station.nowPlayingKind)
         else icyStreamTitle(station.urlLow)
 
     private fun icyStreamTitle(url: String): String? {

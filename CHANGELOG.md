@@ -2,6 +2,13 @@
 
 All notable changes to Eeter are documented here.
 
+## v4.1 — 2026-07-06
+
+- Sky Plus now-playing restored: its stream started sending an empty ICY
+  StreamTitle (the same failure Star FM had), so Sky Plus now uses the
+  sky.ee web API (radio-station id 1) like Sky Plus DnB already did (id 2).
+  New nowPlayingKind 5.
+
 ## v4.0 — 2026-07-06
 
 - Station name removed from under the tiles — the logo speaks for itself.
