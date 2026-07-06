@@ -2,6 +2,12 @@
 
 All notable changes to Eeter are documented here.
 
+## v4.0 — 2026-07-06
+
+- Station name removed from under the tiles — the logo speaks for itself.
+  Each tile is now just the artwork card plus the white artist – track line,
+  and the cards grew taller with the freed space.
+
 ## v3.9 — 2026-07-06
 
 - Artist – track line under each tile is now full white (was 50% gray).

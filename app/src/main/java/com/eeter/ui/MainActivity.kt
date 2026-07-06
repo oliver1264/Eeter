@@ -834,25 +834,14 @@ private fun StationTile(
                 )
             }
         }
-        // Station name under the card, like the playlist titles in the reference.
-        Text(
-            text = displayName(station.name),
-            color = Color.White.copy(alpha = if (highlighted) 0.95f else 0.7f),
-            fontWeight = FontWeight.Medium,
-            fontSize = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp, start = 4.dp, end = 4.dp),
-        )
-        // Current song in full white under the name (empty placeholder keeps rows aligned).
+        // Current song in white under the card (empty placeholder keeps rows aligned).
         Text(
             text = line ?: "",
             color = Color.White,
             fontSize = 11.sp,
             maxLines = 1,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).basicMarquee(),
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp, start = 4.dp, end = 4.dp).basicMarquee(),
         )
     }
 }
