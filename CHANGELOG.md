@@ -2,6 +2,22 @@
 
 All notable changes to Eeter are documented here.
 
+## v3.5 — 2026-07-06
+
+- Start on boot now actually works on Android 14 head units:
+  - The boot receiver starts playback of the last station directly through
+    the playback service, so the radio starts PLAYING with the ignition even
+    if Android blocks opening the window from the background.
+  - The app-window launch is retried (2 s and 7 s after boot) for head units
+    that aren't ready at the first attempt.
+  - The app shows a one-time prompt to grant "Display over other apps" —
+    the permission Android 14 requires for the boot launch to open the UI.
+    Re-armed if the "Start on boot" switch is toggled on again.
+- Star FM artist/track restored: the broadcaster's streams now send an empty
+  ICY StreamTitle (verified: `StreamTitle='';`), so Star FM and Star FM Plus
+  were moved to the raadiod.tv3.ee web now-playing API (page IDs 2 / 1485),
+  the same one already used for Power Hit Radio.
+
 ## v3.4 — 2026-07-06
 
 - Start on boot: the app now opens automatically when the device finishes

@@ -15,12 +15,14 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 
 /**
- * Web "now playing" poller for the 3 stations whose audio streams carry no usable
- * song metadata (Star FM Eesti, Power Hit Radio, Sky Plus DnB). Polls each
- * broadcaster's web API and reports "Artist - Title" via [onUpdate] on the main thread.
+ * Web "now playing" poller for the stations whose audio streams carry no usable
+ * song metadata. Polls the broadcaster's web API and reports "Artist - Title"
+ * via [onUpdate] on the main thread.
  *
  * Kotlin reimplementation of the old `ya.NowPlay` smali patch.
- * kind: 1 = Star FM Eesti, 2 = Power Hit Radio, 3 = Sky Plus DnB.
+ * kind: 1 = Star FM, 2 = Power Hit Radio, 3 = Sky Plus DnB, 4 = Star FM Plus.
+ * (Star FM / Star FM Plus moved here in v3.5: their Icecast streams started
+ * sending an empty StreamTitle, so ICY metadata no longer works for them.)
  */
 class NowPlay(private val onUpdate: (artist: String, title: String) -> Unit) {
 
@@ -29,7 +31,7 @@ class NowPlay(private val onUpdate: (artist: String, title: String) -> Unit) {
 
     fun start(kind: Int) {
         stop()
-        if (kind !in 1..3) return
+        if (kind !in 1..4) return
         job = scope.launch {
             delay(2000)
             while (isActive) {
@@ -58,9 +60,15 @@ class NowPlay(private val onUpdate: (artist: String, title: String) -> Unit) {
             val o = JSONObject(httpGet("https://skyplus.sky.ee/api/radio-stations/2/now-playing"))
             combine(o.optString("artist"), o.optString("title"))
         } else {
-            val page = if (kind == 1) 1513 else 192
-            val referer =
-                if (kind == 1) "https://raadiod.tv3.ee/starfmeesti/" else "https://raadiod.tv3.ee/power/"
+            // WordPress page ids + page slugs from raadiod.tv3.ee (each station page's
+            // on-air widget carries them in data-pageid; the site's own JS polls the
+            // same admin-ajax endpoint with them).
+            val (page, slug) = when (kind) {
+                1 -> 2 to "starfm"
+                2 -> 192 to "power"
+                else -> 1485 to "starfmplus"
+            }
+            val referer = "https://raadiod.tv3.ee/$slug/"
             val o = JSONObject(
                 httpPost(
                     "https://raadiod.tv3.ee/wp-admin/admin-ajax.php?action=get_onair_data",

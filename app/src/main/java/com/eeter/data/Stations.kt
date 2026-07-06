@@ -2,7 +2,7 @@ package com.eeter.data
 
 import com.eeter.R
 
-/** Auto-generated from the recovered station list. nowPlayingKind: 1=StarFM Eesti, 2=Power Hit, 3=Sky Plus DnB (web-API now-playing). */
+/** Auto-generated from the recovered station list. nowPlayingKind: 1=Star FM, 2=Power Hit, 3=Sky Plus DnB, 4=Star FM Plus (web-API now-playing; their streams carry no ICY song titles). */
 data class Station(
     val id: Int,
     val name: String,
@@ -96,8 +96,8 @@ object Stations {
         Station(90, "SKY Radio", "https://stream.skymedia.ee/live/SKY", "https://stream.skymedia.ee/live/SKY", "http://www.sky-radio.fm/", R.drawable.skyradio_logo, 0),
         Station(93, "Sooviraadio", "http://media.uunox.net:8888/;", "http://media.uunox.net:8888/;", "http://sooviraadio.net/raadio/", R.drawable.sooviraadio_logo, 0),
         Station(95, "SSS Radio", "https://uvn-67-97.tll01.zonevs.eu/sss-radio", "https://uvn-67-97.tll01.zonevs.eu/sss-radio", "https://sss-radio.ee/", R.drawable.sssradio_logo, 0),
-        Station(96, "Star FM", "https://ice.leviracloud.eu/star96-aac", "https://ice.leviracloud.eu/star128-aac", "https://raadiod.tv3.ee/", R.drawable.starfm_logo, 0),
-        Station(98, "Star FM Plus", "https://ice.leviracloud.eu/volna96-aac", "https://ice.leviracloud.eu/volna128-aac", "https://raadiod.tv3.ee/", R.drawable.starfmplus_logo, 0),
+        Station(96, "Star FM", "https://ice.leviracloud.eu/star96-aac", "https://ice.leviracloud.eu/star128-aac", "https://raadiod.tv3.ee/", R.drawable.starfm_logo, 1),
+        Station(98, "Star FM Plus", "https://ice.leviracloud.eu/volna96-aac", "https://ice.leviracloud.eu/volna128-aac", "https://raadiod.tv3.ee/", R.drawable.starfmplus_logo, 4),
         Station(99, "SunLight FM", "https://striim.sunlightfm.ee:8443/sunlightfm.mp3", "https://striim.sunlightfm.ee:8443/sunlightfm.mp3", "https://www.sunlightfm.ee/", R.drawable.sunlightfm_logo, 0),
         Station(100, "Super \\u0420\\u0430\\u0434\\u0438\\u043e", "https://stream.skymedia.ee/live/RR_AAC", "https://stream.skymedia.ee/live/RR_AAC", "https://super.radio/", R.drawable.superradio_logo, 0),
         Station(101, "Super \\u0420\\u0430\\u0434\\u0438\\u043e \\u0420\\u0415\\u0422\\u0420\\u041e", "https://stream.skymedia.ee/live/rrretro", "https://stream.skymedia.ee/live/rrretro", "https://super.radio/", R.drawable.superradioretro_logo, 0),

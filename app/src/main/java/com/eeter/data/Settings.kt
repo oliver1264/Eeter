@@ -23,6 +23,7 @@ class SettingsStore(private val context: Context) {
     private val autoplayKey = booleanPreferencesKey("autoplay")
     private val wifiOnlyKey = booleanPreferencesKey("wifi_only")
     private val startOnBootKey = booleanPreferencesKey("start_on_boot")
+    private val bootPromptShownKey = booleanPreferencesKey("boot_prompt_shown")
     private val lastStationKey = intPreferencesKey("last_station")
     private val audioFocusKey = intPreferencesKey("audio_focus")
     private val eqEnabledKey = booleanPreferencesKey("eq_enabled")
@@ -34,6 +35,9 @@ class SettingsStore(private val context: Context) {
 
     /** Launch the app automatically when the device finishes booting (car head units). */
     val startOnBoot: Flow<Boolean> = context.settingsStore.data.map { it[startOnBootKey] ?: true }
+
+    /** Whether the "grant overlay permission for boot start" dialog was already shown. */
+    val bootPromptShown: Flow<Boolean> = context.settingsStore.data.map { it[bootPromptShownKey] ?: false }
     val lastStationId: Flow<Int> = context.settingsStore.data.map { it[lastStationKey] ?: -1 }
 
     /** 0 = pause stream (default), 1 = continue playing anyway, 2 = restart after regaining focus. */
@@ -47,6 +51,7 @@ class SettingsStore(private val context: Context) {
     suspend fun setAutoplay(on: Boolean) = set(autoplayKey, on)
     suspend fun setWifiOnly(on: Boolean) = set(wifiOnlyKey, on)
     suspend fun setStartOnBoot(on: Boolean) = set(startOnBootKey, on)
+    suspend fun setBootPromptShown(on: Boolean) = set(bootPromptShownKey, on)
 
     suspend fun setAudioFocus(value: Int) {
         context.settingsStore.edit { it[audioFocusKey] = value }

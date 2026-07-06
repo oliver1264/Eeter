@@ -28,14 +28,20 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
  * Media3 service that drives playback, the media notification, the lock screen, and
- * the Android Auto browse tree (Favorites / All stations). For the 3 stations whose
+ * the Android Auto browse tree (Favorites / All stations). For the stations whose
  * streams carry no song metadata it runs [NowPlay] and injects the web "now playing".
  */
 class PlaybackService : MediaLibraryService() {
+
+    companion object {
+        /** Sent by [com.eeter.BootReceiver]: start playing the last station after boot. */
+        const val ACTION_BOOT_AUTOPLAY = "com.eeter.BOOT_AUTOPLAY"
+    }
 
     private lateinit var player: ExoPlayer
     private var session: MediaLibrarySession? = null
@@ -76,7 +82,7 @@ class PlaybackService : MediaLibraryService() {
                 val kind = mediaItem?.mediaId
                     ?.let { MediaItems.parseStationId(it) }
                     ?.let { Stations.byId[it]?.nowPlayingKind } ?: 0
-                if (kind in 1..3) nowPlay.start(kind) else nowPlay.stop()
+                if (kind in 1..4) nowPlay.start(kind) else nowPlay.stop()
             }
         })
 
@@ -137,7 +143,7 @@ class PlaybackService : MediaLibraryService() {
         val kind = player.currentMediaItem?.mediaId
             ?.let { MediaItems.parseStationId(it) }
             ?.let { Stations.byId[it]?.nowPlayingKind } ?: 0
-        if (kind in 1..3) return // web poller owns these
+        if (kind in 1..4) return // web poller owns these
         val dash = title.indexOf(" - ")
         if (dash > 0) applyWebMetadata(title.substring(0, dash), title.substring(dash + 3))
         else applyWebMetadata("", title)
@@ -161,6 +167,29 @@ class PlaybackService : MediaLibraryService() {
             .setArtist(null)
             .build()
         player.replaceMediaItem(idx, cur.buildUpon().setMediaMetadata(meta).build())
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_BOOT_AUTOPLAY) scope.launch { bootAutoplay() }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    /**
+     * Boot autoplay without waiting for the UI: on a car head unit the radio should
+     * come up with the ignition even when Android blocks the activity launch from the
+     * background. Builds the same queue MainActivity would and starts the last station.
+     */
+    private suspend fun bootAutoplay() {
+        if (player.playWhenReady || player.mediaItemCount > 0) return // something else already took over
+        val settings = SettingsStore(this)
+        if (!settings.autoplay.first()) return
+        val station = Stations.byId[settings.lastStationId.first()] ?: return
+        val high = settings.highQuality.first()
+        val queue = queueFor(station.id)
+        val idx = queue.indexOfFirst { it.id == station.id }.coerceAtLeast(0)
+        player.setMediaItems(queue.map { MediaItems.stationItem(it, packageName, true, high) }, idx, C.TIME_UNSET)
+        player.prepare()
+        player.play()
     }
 
     /** The user's favorite stations, in canonical order, resolved from the snapshot. */

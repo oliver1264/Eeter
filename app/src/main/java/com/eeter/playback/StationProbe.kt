@@ -16,7 +16,7 @@ import java.net.URL
 object StationProbe {
 
     fun nowPlaying(station: Station): String? =
-        if (station.nowPlayingKind in 1..3) NowPlay.fetchWeb(station.nowPlayingKind)
+        if (station.nowPlayingKind in 1..4) NowPlay.fetchWeb(station.nowPlayingKind)
         else icyStreamTitle(station.urlLow)
 
     private fun icyStreamTitle(url: String): String? {

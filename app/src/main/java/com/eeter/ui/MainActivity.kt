@@ -11,6 +11,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -215,9 +216,10 @@ class MainActivity : ComponentActivity() {
         if (autoplayChecked) return
         val c = controller ?: return
         autoplayChecked = true
-        // Leave it alone only if a previous (surviving) session is actually playing;
+        // Leave it alone if a previous (surviving) session is actually playing, or is
+        // already starting up (e.g. the boot receiver's BOOT_AUTOPLAY is buffering);
         // a stale/stopped session should still be (re)started.
-        if (c.isPlaying) return
+        if (c.isPlaying || (c.playWhenReady && c.mediaItemCount > 0)) return
         lifecycleScope.launch {
             if (!settings.autoplay.first()) return@launch
             val id = settings.lastStationId.first()
@@ -278,6 +280,40 @@ private fun AppScreen(
     var showEq by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val favoriteIds by favStore.favoriteIds.collectAsStateWithLifecycle(initialValue = emptyList())
+
+    // One-time prompt: opening the app from the boot receiver needs "Display over
+    // other apps" (Android blocks background activity launches without it). Shown
+    // until dismissed once; re-armed when "Start on boot" is switched on again.
+    val startOnBootOn by settings.startOnBoot.collectAsStateWithLifecycle(initialValue = false)
+    val bootPromptShown by settings.bootPromptShown.collectAsStateWithLifecycle(initialValue = true)
+    if (startOnBootOn && !bootPromptShown && !Settings.canDrawOverlays(context)) {
+        AlertDialog(
+            onDismissRequest = { scope.launch { settings.setBootPromptShown(true) } },
+            title = { Text("Start on boot") },
+            text = {
+                Text(
+                    "To open automatically after the device starts, Android needs the " +
+                        "\"Display over other apps\" permission for Eeter.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch { settings.setBootPromptShown(true) }
+                    runCatching {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}"),
+                            ),
+                        )
+                    }
+                }) { Text("Open settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = { scope.launch { settings.setBootPromptShown(true) } }) { Text("Later") }
+            },
+        )
+    }
 
     // Mirror controller playback state into Compose.
     var isPlaying by remember { mutableStateOf(false) }
@@ -1019,7 +1055,13 @@ private fun SettingsScreen(settings: SettingsStore, onBack: () -> Unit) {
             title = "Start on boot",
             caption = "Open the app automatically when the device starts.",
             checked = startOnBoot,
-            onChange = { scope.launch { settings.setStartOnBoot(it) } },
+            onChange = {
+                scope.launch {
+                    settings.setStartOnBoot(it)
+                    // Re-arm the overlay-permission prompt when switched back on.
+                    if (it) settings.setBootPromptShown(false)
+                }
+            },
         )
         SettingBasic(
             title = "Audio focus",
