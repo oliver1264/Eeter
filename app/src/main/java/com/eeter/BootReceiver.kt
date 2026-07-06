@@ -18,18 +18,20 @@ import kotlinx.coroutines.runBlocking
  * launches from the background unless "Display over other apps" is granted:
  *  1. starts [PlaybackService] with BOOT_AUTOPLAY so the last station starts
  *     PLAYING right away (media-playback services may start from boot on A14);
- *  2. tries to open [MainActivity] a few times (head units are often not ready
- *     at the first attempt). Works once the overlay permission is granted or on
- *     permissive ROMs; MainActivity prompts for the grant.
+ *     the service then also retries opening the UI across the first minute;
+ *  2. tries to open [MainActivity] itself as an early fallback.
+ * Also handles MY_PACKAGE_REPLACED, so the app reopens right after an update —
+ * which doubles as a test that launching works at all on a given ROM.
  * Controlled by the "Start on boot" switch in Settings.
  */
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
-        if (action != Intent.ACTION_BOOT_COMPLETED &&
-            action != "android.intent.action.QUICKBOOT_POWERON"
-        ) return
+        val isBoot = action == Intent.ACTION_BOOT_COMPLETED ||
+            action == "android.intent.action.QUICKBOOT_POWERON"
+        val isUpdate = action == Intent.ACTION_MY_PACKAGE_REPLACED
+        if (!isBoot && !isUpdate) return
         // Receivers get ~10 s; the DataStore reads are quick.
         val settings = SettingsStore(context)
         val enabled = runCatching {
@@ -37,33 +39,41 @@ class BootReceiver : BroadcastReceiver() {
         }.getOrDefault(true)
         if (!enabled) return
 
-        // Kick off playback of the last station immediately (independent of the UI).
-        // Only when the service is guaranteed to reach startForeground(), i.e. it
-        // will actually start playing — otherwise the pending FGS start would crash.
-        val autoplay = runCatching {
-            runBlocking {
-                settings.autoplay.first() && Stations.byId[settings.lastStationId.first()] != null
-            }
-        }.getOrDefault(false)
-        if (autoplay) {
-            runCatching {
-                context.startForegroundService(
-                    Intent(context, PlaybackService::class.java)
-                        .setAction(PlaybackService.ACTION_BOOT_AUTOPLAY),
-                )
+        // On boot, kick off playback of the last station immediately (independent
+        // of the UI). Only when the service is guaranteed to reach
+        // startForeground(), i.e. it will actually start playing — otherwise the
+        // pending FGS start would crash. Not done after app updates (no surprise
+        // audio); there the UI launch below still autoplays if it gets through.
+        if (isBoot) {
+            val autoplay = runCatching {
+                runBlocking {
+                    settings.autoplay.first() && Stations.byId[settings.lastStationId.first()] != null
+                }
+            }.getOrDefault(false)
+            if (autoplay) {
+                runCatching {
+                    context.startForegroundService(
+                        Intent(context, PlaybackService::class.java)
+                            .setAction(PlaybackService.ACTION_BOOT_AUTOPLAY),
+                    )
+                }
             }
         }
 
-        // Open the UI: first try ~2 s after boot, once more at ~7 s (goAsync keeps
-        // the receiver alive; blocked launches fail silently, so just fire both).
+        // Open the UI: first try ~2 s in, once more at ~7 s (goAsync keeps the
+        // receiver alive that long; the service retries further out). Blocked
+        // launches fail silently, so just fire and let the guards dedupe.
         val result = goAsync()
         val handler = Handler(Looper.getMainLooper())
         val launch = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        handler.postDelayed({ runCatching { context.startActivity(launch) } }, 2_000)
+        handler.postDelayed(
+            { if (!MainActivity.isVisible) runCatching { context.startActivity(launch) } },
+            2_000,
+        )
         handler.postDelayed(
             {
-                runCatching { context.startActivity(launch) }
+                if (!MainActivity.isVisible) runCatching { context.startActivity(launch) }
                 result.finish()
             },
             7_000,

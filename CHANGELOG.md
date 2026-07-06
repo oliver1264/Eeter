@@ -2,6 +2,23 @@
 
 All notable changes to Eeter are documented here.
 
+## v3.6 — 2026-07-06
+
+- Star FM now shows the CORRECT station's artist/track. tv3's now-playing
+  API turned out to serve Star FM Eesti's feed for the main Star FM page id
+  (a bug on their end), so Star FM and Star FM Plus now scrape the on-air
+  widget from the server-rendered station page instead (only the first
+  ~50 KB of the page is read, polled every 30 s).
+- Boot start hardened further: the playback service (which is allowed to
+  start at boot and stays alive) now retries opening the app window at 3 s,
+  10 s, 25 s, 45 s and 70 s after boot — head units are often not ready
+  until well after BOOT_COMPLETED. Retries stop once the window is visible.
+- The app also relaunches itself right after being updated
+  (MY_PACKAGE_REPLACED). This doubles as a diagnostic: if the app window
+  opens after installing an update but not after ignition, the head unit
+  isn't delivering the boot broadcast (check its own "app auto start"
+  setting or whether ignition-off is really a shutdown vs. sleep).
+
 ## v3.5 — 2026-07-06
 
 - Start on boot now actually works on Android 14 head units:

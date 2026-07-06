@@ -2,6 +2,8 @@ package com.eeter.playback
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -21,6 +23,7 @@ import com.eeter.data.FavoritesStore
 import com.eeter.data.SettingsStore
 import com.eeter.data.Station
 import com.eeter.data.Stations
+import com.eeter.ui.MainActivity
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -170,8 +173,33 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_BOOT_AUTOPLAY) scope.launch { bootAutoplay() }
+        if (intent?.action == ACTION_BOOT_AUTOPLAY) {
+            scope.launch { bootAutoplay() }
+            scheduleBootUiLaunches()
+        }
         return super.onStartCommand(intent, flags, startId)
+    }
+
+    /**
+     * Keep trying to bring up the UI after boot. The boot receiver only lives ~10 s,
+     * but this service (kept alive as a foreground media service) can retry across
+     * the first minute — head units are often not ready to show apps until well
+     * after BOOT_COMPLETED. Attempts stop as soon as the activity is visible.
+     */
+    private fun scheduleBootUiLaunches() {
+        val handler = Handler(Looper.getMainLooper())
+        for (t in longArrayOf(3_000, 10_000, 25_000, 45_000, 70_000)) {
+            handler.postDelayed({
+                if (!MainActivity.isVisible) {
+                    runCatching {
+                        startActivity(
+                            Intent(this, MainActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                }
+            }, t)
+        }
     }
 
     /**

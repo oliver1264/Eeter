@@ -141,6 +141,13 @@ private val DefaultBrand = Color(0xFF1A1A1E)
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        /** True while any MainActivity is started; boot-launch retries check this. */
+        @Volatile
+        var isVisible = false
+            private set
+    }
+
     private var controller by mutableStateOf<MediaController?>(null)
     private val eq = EqualizerController()
     private lateinit var settings: SettingsStore
@@ -193,6 +200,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        isVisible = true
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         val future = MediaController.Builder(this, token).buildAsync()
         future.addListener({
@@ -203,6 +211,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
+        isVisible = false
         controller?.release()
         controller = null
     }
