@@ -638,7 +638,8 @@ private fun StationGridScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(DrawerColor)) {
+    // Pure black page background (per user request); the tile cards keep TileColor.
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
             // Top bar: hamburger + now-playing marquee + volume + overflow menu.
             Row(

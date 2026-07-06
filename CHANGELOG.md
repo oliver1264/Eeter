@@ -2,6 +2,12 @@
 
 All notable changes to Eeter are documented here.
 
+## v3.8 — 2026-07-06
+
+- Station grid page background is now pure black (was dark navy); the
+  station cards themselves keep their navy tile color, matching the
+  reference design's black backdrop.
+
 ## v3.7 — 2026-07-06
 
 - Station tiles restyled to the Spotify-like reference design (app_icons.jpg
