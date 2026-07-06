@@ -664,8 +664,8 @@ private fun StationGridScreen(
                 OverflowMenu(tint = Color.White, onEqualizer = onOpenEq, onSettings = onOpenSettings, onClose = onClose)
             }
 
-            // 12 tiles (4x3) per page; extra favorites go onto further swipe pages.
-            val gridPages = remember(favorites) { favorites.chunked(12) }
+            // 15 tiles (5x3) per page; extra favorites go onto further swipe pages.
+            val gridPages = remember(favorites) { favorites.chunked(15) }
             val gridPager = rememberPagerState(pageCount = { gridPages.size })
 
             // Caption every tile with that station's current song. The playing station
@@ -697,8 +697,8 @@ private fun StationGridScreen(
                             Modifier.weight(1f).fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(spacing),
                         ) {
-                            for (col in 0 until 4) {
-                                val s = stations.getOrNull(row * 4 + col)
+                            for (col in 0 until 5) {
+                                val s = stations.getOrNull(row * 5 + col)
                                 if (s != null) {
                                     val isCurrent = currentId == MediaItems.stationMediaId(s.id)
                                     StationTile(

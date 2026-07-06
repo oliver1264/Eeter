@@ -2,6 +2,11 @@
 
 All notable changes to Eeter are documented here.
 
+## v4.2 — 2026-07-06
+
+- Landscape grid is now 5 columns x 3 rows (15 stations per swipe page,
+  was 4 x 3 / 12).
+
 ## v4.1 — 2026-07-06
 
 - Sky Plus now-playing restored: its stream started sending an empty ICY
