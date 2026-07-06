@@ -670,11 +670,10 @@ private fun StationGridScreen(
     var editMode by remember { mutableStateOf(false) }
     var order by remember(favorites) { mutableStateOf(favorites) }
     var dragId by remember { mutableStateOf<Int?>(null) }
-    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var dragPos by remember { mutableStateOf(Offset.Zero) }
     fun saveLayout() {
         editMode = false
         dragId = null
-        dragOffset = Offset.Zero
         onSaveOrder(order)
     }
 
@@ -725,103 +724,164 @@ private fun StationGridScreen(
             }
 
             val spacing = 6.dp
-            HorizontalPager(
-                state = gridPager,
-                userScrollEnabled = !editMode,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            ) { p ->
-                val pageStart = p * 15
-                val pageCount = gridPages[p].size
-                BoxWithConstraints(
-                    Modifier.fillMaxSize().pointerInput(editMode) {
-                        // In edit mode a tap on the empty background also saves and exits.
-                        if (editMode) detectTapGestures { saveLayout() }
-                    },
-                ) {
-                    val spacingPx = with(LocalDensity.current) { spacing.toPx() }
-                    val cellW = (constraints.maxWidth - spacingPx * 6) / 5f
-                    val cellH = (constraints.maxHeight - spacingPx * 4) / 3f
-                    val cellSize = with(LocalDensity.current) { DpSize(cellW.toDp(), cellH.toDp()) }
-                    fun basePos(i: Int) = Offset(
-                        spacingPx + (i % 5) * (cellW + spacingPx),
-                        spacingPx + (i / 5) * (cellH + spacingPx),
-                    )
-                    // key(s.id) keeps each tile's composable identity stable across
-                    // reorders, so its position change animates instead of resetting.
-                    for (idx in 0 until pageCount) {
-                        val s = order[pageStart + idx]
-                        key(s.id) {
-                            val isCurrent = currentId == MediaItems.stationMediaId(s.id)
-                            val dragging = dragId == s.id
-                            val target = basePos(idx)
-                            val settled by animateOffsetAsState(target, label = "tilePos")
-                            val pos = if (dragging) target + dragOffset else settled
-                            // Launcher-style wobble while in edit mode; tiles rock in
-                            // alternating phase so the grid doesn't sway in unison.
-                            val wobble = rememberInfiniteTransition(label = "wobble")
-                            val angle by wobble.animateFloat(
-                                initialValue = -1.6f,
-                                targetValue = 1.6f,
-                                animationSpec = infiniteRepeatable(
-                                    tween(durationMillis = 130 + (s.id % 4) * 20, easing = LinearEasing),
-                                    RepeatMode.Reverse,
-                                ),
-                                label = "wobbleAngle",
-                            )
-                            StationTile(
-                                station = s,
-                                highlighted = isCurrent && isPlaying,
-                                line = if (isCurrent && statusLine != null) statusLine else tileLines[s.id],
-                                modifier = Modifier
-                                    .offset { IntOffset(pos.x.roundToInt(), pos.y.roundToInt()) }
-                                    .size(cellSize)
-                                    .zIndex(if (dragging) 1f else 0f)
-                                    .graphicsLayer {
-                                        if (editMode && !dragging) rotationZ = angle
-                                        if (dragging) {
-                                            scaleX = 1.08f
-                                            scaleY = 1.08f
-                                        }
+            // The drag gesture and the dragged tile live on this container, ABOVE the
+            // pager: a tile can then be held in place while the pages flip underneath
+            // it (edge hover), which would be impossible if they lived inside a page.
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val spacingPx = with(LocalDensity.current) { spacing.toPx() }
+                val cellW = (constraints.maxWidth - spacingPx * 6) / 5f
+                val cellH = (constraints.maxHeight - spacingPx * 4) / 3f
+                val cellSize = with(LocalDensity.current) { DpSize(cellW.toDp(), cellH.toDp()) }
+                fun basePos(i: Int) = Offset(
+                    spacingPx + (i % 5) * (cellW + spacingPx),
+                    spacingPx + (i / 5) * (cellH + spacingPx),
+                )
+                fun cellIndexAt(pos: Offset): Int {
+                    val col = ((pos.x - spacingPx) / (cellW + spacingPx)).toInt().coerceIn(0, 4)
+                    val row = ((pos.y - spacingPx) / (cellH + spacingPx)).toInt().coerceIn(0, 2)
+                    return row * 5 + col
+                }
+                // Moves the dragged station to the cell under the finger on the page
+                // currently shown (no-op while the pager is still animating a flip).
+                fun hoverReorder() {
+                    val id = dragId ?: return
+                    if (gridPager.isScrollInProgress) return
+                    val pageStart = gridPager.settledPage * 15
+                    if (pageStart >= order.size) return
+                    val from = order.indexOfFirst { it.id == id }
+                    val t = (pageStart + cellIndexAt(dragPos)).coerceAtMost(order.size - 1)
+                    if (from != t && from >= 0) {
+                        val list = order.toMutableList()
+                        val item = list.removeAt(from)
+                        list.add(t, item)
+                        order = list
+                    }
+                }
+
+                HorizontalPager(
+                    state = gridPager,
+                    userScrollEnabled = dragId == null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { off ->
+                                    if (gridPager.isScrollInProgress) return@detectDragGesturesAfterLongPress
+                                    val pageStart = gridPager.settledPage * 15
+                                    val i = cellIndexAt(off)
+                                    if (pageStart + i < order.size) {
+                                        editMode = true
+                                        dragId = order[pageStart + i].id
+                                        dragPos = off
                                     }
-                                    .pointerInput(editMode) {
-                                        detectTapGestures {
-                                            if (editMode) saveLayout() else onTile(s)
-                                        }
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    if (dragId != null) {
+                                        dragPos += amount
+                                        hoverReorder()
                                     }
-                                    .pointerInput(s.id) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = {
-                                                editMode = true
-                                                dragId = s.id
-                                                dragOffset = Offset.Zero
-                                            },
-                                            onDrag = { change, amount ->
-                                                change.consume()
-                                                dragOffset += amount
-                                                val from = order.indexOfFirst { it.id == s.id }
-                                                val i = from - pageStart
-                                                val center = basePos(i) + dragOffset +
-                                                    Offset(cellW / 2f, cellH / 2f)
-                                                val col = ((center.x - spacingPx) / (cellW + spacingPx))
-                                                    .toInt().coerceIn(0, 4)
-                                                val row = ((center.y - spacingPx) / (cellH + spacingPx))
-                                                    .toInt().coerceIn(0, 2)
-                                                val t = (row * 5 + col).coerceAtMost(pageCount - 1)
-                                                if (t != i) {
-                                                    val list = order.toMutableList()
-                                                    list.add(pageStart + t, list.removeAt(from))
-                                                    order = list
-                                                    // Keep the tile under the finger after its
-                                                    // base cell jumps to the new slot.
-                                                    dragOffset += basePos(i) - basePos(t)
-                                                }
-                                            },
-                                            onDragEnd = { dragId = null; dragOffset = Offset.Zero },
-                                            onDragCancel = { dragId = null; dragOffset = Offset.Zero },
-                                        )
-                                    },
+                                },
+                                onDragEnd = { dragId = null },
+                                onDragCancel = { dragId = null },
                             )
+                        },
+                ) { p ->
+                    val pageStart = p * 15
+                    val pageCount = gridPages[p].size
+                    Box(
+                        Modifier.fillMaxSize().pointerInput(editMode) {
+                            // In edit mode a tap on the empty background also saves and exits.
+                            if (editMode) detectTapGestures { saveLayout() }
+                        },
+                    ) {
+                        // key(s.id) keeps each tile's composable identity stable across
+                        // reorders, so its position change animates instead of resetting.
+                        for (idx in 0 until pageCount) {
+                            val s = order[pageStart + idx]
+                            key(s.id) {
+                                val isCurrent = currentId == MediaItems.stationMediaId(s.id)
+                                val dragging = dragId == s.id
+                                val settled by animateOffsetAsState(basePos(idx), label = "tilePos")
+                                // Launcher-style wobble while in edit mode; tiles rock in
+                                // alternating phase so the grid doesn't sway in unison.
+                                val wobble = rememberInfiniteTransition(label = "wobble")
+                                val angle by wobble.animateFloat(
+                                    initialValue = -1.6f,
+                                    targetValue = 1.6f,
+                                    animationSpec = infiniteRepeatable(
+                                        tween(durationMillis = 130 + (s.id % 4) * 20, easing = LinearEasing),
+                                        RepeatMode.Reverse,
+                                    ),
+                                    label = "wobbleAngle",
+                                )
+                                StationTile(
+                                    station = s,
+                                    highlighted = isCurrent && isPlaying,
+                                    line = if (isCurrent && statusLine != null) statusLine else tileLines[s.id],
+                                    modifier = Modifier
+                                        .offset { IntOffset(settled.x.roundToInt(), settled.y.roundToInt()) }
+                                        .size(cellSize)
+                                        .graphicsLayer {
+                                            // The in-page copy of the dragged tile is hidden;
+                                            // the floating overlay below renders it instead.
+                                            alpha = if (dragging) 0f else 1f
+                                            if (editMode && !dragging) rotationZ = angle
+                                        }
+                                        .pointerInput(editMode) {
+                                            detectTapGestures {
+                                                if (editMode) saveLayout() else onTile(s)
+                                            }
+                                        },
+                                )
+                            }
                         }
+                    }
+                }
+
+                // The held tile floats above the pager, following the finger.
+                dragId?.let { id ->
+                    order.firstOrNull { it.id == id }?.let { s ->
+                        val isCurrent = currentId == MediaItems.stationMediaId(s.id)
+                        StationTile(
+                            station = s,
+                            highlighted = isCurrent && isPlaying,
+                            line = if (isCurrent && statusLine != null) statusLine else tileLines[s.id],
+                            modifier = Modifier
+                                .offset {
+                                    IntOffset(
+                                        (dragPos.x - cellW / 2f).roundToInt(),
+                                        (dragPos.y - cellH / 2f).roundToInt(),
+                                    )
+                                }
+                                .size(cellSize)
+                                .zIndex(2f)
+                                .graphicsLayer {
+                                    scaleX = 1.08f
+                                    scaleY = 1.08f
+                                },
+                        )
+                    }
+                }
+
+                // Edge hover: holding the dragged tile at the screen edge flips to the
+                // previous/next page after a short dwell (and keeps flipping while held).
+                val edgePx = constraints.maxWidth * 0.05f
+                val edgeDir = when {
+                    dragId == null -> 0
+                    dragPos.x < edgePx -> -1
+                    dragPos.x > constraints.maxWidth - edgePx -> 1
+                    else -> 0
+                }
+                LaunchedEffect(edgeDir, dragId) {
+                    if (dragId == null || edgeDir == 0) return@LaunchedEffect
+                    while (true) {
+                        delay(550)
+                        val target = gridPager.settledPage + edgeDir
+                        if (target !in gridPages.indices) break
+                        gridPager.animateScrollToPage(target)
+                        // Pull the held tile onto the page that just settled.
+                        hoverReorder()
                     }
                 }
             }

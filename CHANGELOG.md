@@ -2,6 +2,15 @@
 
 All notable changes to Eeter are documented here.
 
+## v4.4 — 2026-07-06
+
+- Edge-hover page flipping while rearranging: hold a dragged tile at the
+  left/right edge of the screen for half a second and the grid flips to the
+  previous/next page, carrying the tile along (keeps flipping while held).
+  Internally the dragged tile now floats above the pager instead of living
+  inside a page, so it survives the flip.
+- Page swiping now also works while in edit mode (when not holding a tile).
+
 ## v4.3 — 2026-07-06
 
 - Launcher-style tile rearranging on the grid: long-press a station tile and
