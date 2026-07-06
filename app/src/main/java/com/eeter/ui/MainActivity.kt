@@ -122,8 +122,11 @@ import com.eeter.data.Station
 import com.eeter.data.Stations
 import com.eeter.playback.MediaItems
 import com.eeter.playback.PlaybackService
+import com.eeter.playback.StationProbe
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
@@ -617,6 +620,24 @@ private fun StationGridScreen(
             // 12 tiles (4x3) per page; extra favorites go onto further swipe pages.
             val gridPages = remember(favorites) { favorites.chunked(12) }
             val gridPager = rememberPagerState(pageCount = { gridPages.size })
+
+            // Caption every tile with that station's current song. The playing station
+            // reuses the live player metadata; the others are probed (web API or a
+            // one-block ICY read) every 30 s — only the visible page, to cap data use.
+            var tileLines by remember { mutableStateOf(mapOf<Int, String>()) }
+            val visibleStations = gridPages.getOrNull(gridPager.settledPage).orEmpty()
+            LaunchedEffect(visibleStations) {
+                while (true) {
+                    val fetched = visibleStations.map { s ->
+                        async(Dispatchers.IO) {
+                            s.id to runCatching { StationProbe.nowPlaying(s) }.getOrNull()
+                        }
+                    }.awaitAll()
+                    tileLines = tileLines + fetched.mapNotNull { (id, line) -> line?.let { id to it } }
+                    delay(30_000)
+                }
+            }
+
             val spacing = 10.dp
             HorizontalPager(state = gridPager, modifier = Modifier.weight(1f).fillMaxWidth()) { p ->
                 val stations = gridPages[p]
@@ -636,6 +657,7 @@ private fun StationGridScreen(
                                     StationTile(
                                         station = s,
                                         highlighted = isCurrent && isPlaying,
+                                        line = if (isCurrent && statusLine != null) statusLine else tileLines[s.id],
                                         modifier = Modifier.weight(1f).fillMaxHeight(),
                                         onClick = { onTile(s) },
                                     )
@@ -722,11 +744,12 @@ private fun VolumeOverlay(vol: VolumeState, onInteract: () -> Unit, modifier: Mo
 private fun StationTile(
     station: Station,
     highlighted: Boolean,
+    line: String?,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(14.dp)
-    Box(
+    Column(
         modifier
             .clip(shape)
             .background(TileColor)
@@ -734,28 +757,40 @@ private fun StationTile(
                 if (highlighted) Modifier.border(3.dp, Color.White.copy(alpha = 0.9f), shape)
                 else Modifier
             )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+            .clickable(onClick = onClick)
+            .padding(bottom = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (station.logoRes != 0) {
-            AsyncImage(
-                model = station.logoRes,
-                contentDescription = displayName(station.name),
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize().padding(14.dp),
-            )
-        } else {
-            Text(
-                text = displayName(station.name),
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 10.dp),
-            )
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            if (station.logoRes != 0) {
+                AsyncImage(
+                    model = station.logoRes,
+                    contentDescription = displayName(station.name),
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),
+                )
+            } else {
+                Text(
+                    text = displayName(station.name),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 10.dp),
+                )
+            }
         }
+        // Current song under the logo (empty placeholder keeps the logos aligned).
+        Text(
+            text = line ?: "",
+            color = Color.White.copy(alpha = 0.75f),
+            fontSize = 12.sp,
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).basicMarquee(),
+        )
     }
 }
 
@@ -951,6 +986,7 @@ private fun SettingsScreen(settings: SettingsStore, onBack: () -> Unit) {
     val highQuality by settings.highQuality.collectAsStateWithLifecycle(initialValue = true)
     val autoplay by settings.autoplay.collectAsStateWithLifecycle(initialValue = true)
     val wifiOnly by settings.wifiOnly.collectAsStateWithLifecycle(initialValue = false)
+    val startOnBoot by settings.startOnBoot.collectAsStateWithLifecycle(initialValue = true)
     val audioFocus by settings.audioFocus.collectAsStateWithLifecycle(initialValue = AUDIO_FOCUS_PAUSE)
     var showFocusDialog by remember { mutableStateOf(false) }
 
@@ -978,6 +1014,12 @@ private fun SettingsScreen(settings: SettingsStore, onBack: () -> Unit) {
             caption = "Play radio only on Wi-Fi.",
             checked = wifiOnly,
             onChange = { scope.launch { settings.setWifiOnly(it) } },
+        )
+        SettingSwitch(
+            title = "Start on boot",
+            caption = "Open the app automatically when the device starts.",
+            checked = startOnBoot,
+            onChange = { scope.launch { settings.setStartOnBoot(it) } },
         )
         SettingBasic(
             title = "Audio focus",

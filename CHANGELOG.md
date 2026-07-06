@@ -2,6 +2,19 @@
 
 All notable changes to Eeter are documented here.
 
+## v3.4 — 2026-07-06
+
+- Start on boot: the app now opens automatically when the device finishes
+  booting (car head units — the radio comes up with the ignition, and
+  AutoPlay resumes the last station). Controlled by a new "Start on boot"
+  switch in Settings (default on). If the head unit blocks the launch,
+  grant Eeter "Display over other apps".
+- Landscape grid tiles now show the current song ("Artist - Track") under
+  each station logo. The playing station uses the live stream metadata;
+  the other visible tiles are polled every 30 s (web now-playing APIs for
+  Star FM Eesti / Power Hit / Sky Plus DnB, a short ICY metadata probe for
+  the rest). Only the visible grid page is polled to limit data use.
+
 ## v3.3 — 2026-06-11
 
 - Volume bar now appears on head units whose physical volume knob changes

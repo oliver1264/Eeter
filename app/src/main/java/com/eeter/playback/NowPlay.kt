@@ -33,7 +33,7 @@ class NowPlay(private val onUpdate: (artist: String, title: String) -> Unit) {
         job = scope.launch {
             delay(2000)
             while (isActive) {
-                val text = runCatching { fetch(kind) }.getOrNull()
+                val text = runCatching { fetchWeb(kind) }.getOrNull()
                 if (!text.isNullOrEmpty()) {
                     val dash = text.indexOf(" - ")
                     val artist = if (dash > 0) text.substring(0, dash) else text
@@ -50,7 +50,10 @@ class NowPlay(private val onUpdate: (artist: String, title: String) -> Unit) {
         job = null
     }
 
-    private fun fetch(kind: Int): String? {
+    companion object {
+
+    /** One-shot web "now playing" lookup, also used by [StationProbe] for the grid tiles. */
+    fun fetchWeb(kind: Int): String? {
         return if (kind == 3) {
             val o = JSONObject(httpGet("https://skyplus.sky.ee/api/radio-stations/2/now-playing"))
             combine(o.optString("artist"), o.optString("title"))
@@ -129,4 +132,6 @@ class NowPlay(private val onUpdate: (artist: String, title: String) -> Unit) {
             return String(bos.toByteArray(), StandardCharsets.UTF_8)
         }
     }
+
+    } // companion object
 }

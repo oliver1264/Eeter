@@ -22,6 +22,7 @@ class SettingsStore(private val context: Context) {
     private val highQualityKey = booleanPreferencesKey("high_quality")
     private val autoplayKey = booleanPreferencesKey("autoplay")
     private val wifiOnlyKey = booleanPreferencesKey("wifi_only")
+    private val startOnBootKey = booleanPreferencesKey("start_on_boot")
     private val lastStationKey = intPreferencesKey("last_station")
     private val audioFocusKey = intPreferencesKey("audio_focus")
     private val eqEnabledKey = booleanPreferencesKey("eq_enabled")
@@ -30,6 +31,9 @@ class SettingsStore(private val context: Context) {
     val highQuality: Flow<Boolean> = context.settingsStore.data.map { it[highQualityKey] ?: true }
     val autoplay: Flow<Boolean> = context.settingsStore.data.map { it[autoplayKey] ?: true }
     val wifiOnly: Flow<Boolean> = context.settingsStore.data.map { it[wifiOnlyKey] ?: false }
+
+    /** Launch the app automatically when the device finishes booting (car head units). */
+    val startOnBoot: Flow<Boolean> = context.settingsStore.data.map { it[startOnBootKey] ?: true }
     val lastStationId: Flow<Int> = context.settingsStore.data.map { it[lastStationKey] ?: -1 }
 
     /** 0 = pause stream (default), 1 = continue playing anyway, 2 = restart after regaining focus. */
@@ -42,6 +46,7 @@ class SettingsStore(private val context: Context) {
     suspend fun setHighQuality(on: Boolean) = set(highQualityKey, on)
     suspend fun setAutoplay(on: Boolean) = set(autoplayKey, on)
     suspend fun setWifiOnly(on: Boolean) = set(wifiOnlyKey, on)
+    suspend fun setStartOnBoot(on: Boolean) = set(startOnBootKey, on)
 
     suspend fun setAudioFocus(value: Int) {
         context.settingsStore.edit { it[audioFocusKey] = value }
