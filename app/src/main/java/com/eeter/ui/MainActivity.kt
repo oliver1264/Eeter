@@ -21,13 +21,23 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateOffsetAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -84,6 +94,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -94,17 +105,24 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
@@ -134,6 +152,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /** Drawer background, matching the reference's dark-navy menu. */
 private val DrawerColor = Color(0xFF0B1A2E)
@@ -460,6 +479,7 @@ private fun AppScreen(
                         onPlay(s, false)
                     }
                 },
+                onSaveOrder = { list -> scope.launch { favStore.setOrder(list.map { it.id }) } },
             )
             return@ModalNavigationDrawer
         }
@@ -600,10 +620,14 @@ private fun PlayerScreen(
 private val TileColor = Color(0xFF12263F)
 
 /**
- * Landscape favorites grid for wide displays (car head units): 4 columns x 3 rows
+ * Landscape favorites grid for wide displays (car head units): 5 columns x 3 rows
  * of big logo buttons. Tapping a tile plays that station without leaving the grid;
- * tapping the playing tile toggles pause. With >12 favorites the grid paginates:
+ * tapping the playing tile toggles pause. With >15 favorites the grid paginates:
  * swipe left/right between pages (indicator dots at the bottom).
+ *
+ * Launcher-style rearranging: long-pressing a tile enters edit mode (all tiles
+ * wobble) and starts dragging it; hovering over another cell shifts the others
+ * out of the way. Any tap while in edit mode saves the layout and exits.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -617,6 +641,7 @@ private fun StationGridScreen(
     onOpenSettings: () -> Unit,
     onClose: () -> Unit,
     onTile: (Station) -> Unit,
+    onSaveOrder: (List<Station>) -> Unit,
 ) {
     // Volume bar overlay: shown by the top-bar volume button or by any volume
     // change (hardware knob/buttons), hides 5 s after the last interaction
@@ -639,6 +664,20 @@ private fun StationGridScreen(
     }
 
     // Pure black page background (per user request); the tile cards keep TileColor.
+    // Launcher-style edit mode: long-press wobbles the tiles and drags one around;
+    // `order` is the local working copy of the favorites while rearranging (it
+    // resyncs from upstream whenever the favorites themselves change).
+    var editMode by remember { mutableStateOf(false) }
+    var order by remember(favorites) { mutableStateOf(favorites) }
+    var dragId by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    fun saveLayout() {
+        editMode = false
+        dragId = null
+        dragOffset = Offset.Zero
+        onSaveOrder(order)
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
             // Top bar: hamburger + now-playing marquee + volume + overflow menu.
@@ -650,7 +689,7 @@ private fun StationGridScreen(
                     Icon(Icons.Filled.Menu, contentDescription = "Menu", tint = Color.White)
                 }
                 Text(
-                    text = statusLine ?: "",
+                    text = if (editMode) "Move the tiles — tap anywhere to save" else statusLine ?: "",
                     color = Color.White,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 16.sp,
@@ -665,7 +704,7 @@ private fun StationGridScreen(
             }
 
             // 15 tiles (5x3) per page; extra favorites go onto further swipe pages.
-            val gridPages = remember(favorites) { favorites.chunked(15) }
+            val gridPages = remember(order) { order.chunked(15) }
             val gridPager = rememberPagerState(pageCount = { gridPages.size })
 
             // Caption every tile with that station's current song. The playing station
@@ -686,32 +725,102 @@ private fun StationGridScreen(
             }
 
             val spacing = 6.dp
-            HorizontalPager(state = gridPager, modifier = Modifier.weight(1f).fillMaxWidth()) { p ->
-                val stations = gridPages[p]
-                Column(
-                    Modifier.fillMaxSize().padding(spacing),
-                    verticalArrangement = Arrangement.spacedBy(spacing),
+            HorizontalPager(
+                state = gridPager,
+                userScrollEnabled = !editMode,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            ) { p ->
+                val pageStart = p * 15
+                val pageCount = gridPages[p].size
+                BoxWithConstraints(
+                    Modifier.fillMaxSize().pointerInput(editMode) {
+                        // In edit mode a tap on the empty background also saves and exits.
+                        if (editMode) detectTapGestures { saveLayout() }
+                    },
                 ) {
-                    for (row in 0 until 3) {
-                        Row(
-                            Modifier.weight(1f).fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(spacing),
-                        ) {
-                            for (col in 0 until 5) {
-                                val s = stations.getOrNull(row * 5 + col)
-                                if (s != null) {
-                                    val isCurrent = currentId == MediaItems.stationMediaId(s.id)
-                                    StationTile(
-                                        station = s,
-                                        highlighted = isCurrent && isPlaying,
-                                        line = if (isCurrent && statusLine != null) statusLine else tileLines[s.id],
-                                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                                        onClick = { onTile(s) },
-                                    )
-                                } else {
-                                    Spacer(Modifier.weight(1f))
-                                }
-                            }
+                    val spacingPx = with(LocalDensity.current) { spacing.toPx() }
+                    val cellW = (constraints.maxWidth - spacingPx * 6) / 5f
+                    val cellH = (constraints.maxHeight - spacingPx * 4) / 3f
+                    val cellSize = with(LocalDensity.current) { DpSize(cellW.toDp(), cellH.toDp()) }
+                    fun basePos(i: Int) = Offset(
+                        spacingPx + (i % 5) * (cellW + spacingPx),
+                        spacingPx + (i / 5) * (cellH + spacingPx),
+                    )
+                    // key(s.id) keeps each tile's composable identity stable across
+                    // reorders, so its position change animates instead of resetting.
+                    for (idx in 0 until pageCount) {
+                        val s = order[pageStart + idx]
+                        key(s.id) {
+                            val isCurrent = currentId == MediaItems.stationMediaId(s.id)
+                            val dragging = dragId == s.id
+                            val target = basePos(idx)
+                            val settled by animateOffsetAsState(target, label = "tilePos")
+                            val pos = if (dragging) target + dragOffset else settled
+                            // Launcher-style wobble while in edit mode; tiles rock in
+                            // alternating phase so the grid doesn't sway in unison.
+                            val wobble = rememberInfiniteTransition(label = "wobble")
+                            val angle by wobble.animateFloat(
+                                initialValue = -1.6f,
+                                targetValue = 1.6f,
+                                animationSpec = infiniteRepeatable(
+                                    tween(durationMillis = 130 + (s.id % 4) * 20, easing = LinearEasing),
+                                    RepeatMode.Reverse,
+                                ),
+                                label = "wobbleAngle",
+                            )
+                            StationTile(
+                                station = s,
+                                highlighted = isCurrent && isPlaying,
+                                line = if (isCurrent && statusLine != null) statusLine else tileLines[s.id],
+                                modifier = Modifier
+                                    .offset { IntOffset(pos.x.roundToInt(), pos.y.roundToInt()) }
+                                    .size(cellSize)
+                                    .zIndex(if (dragging) 1f else 0f)
+                                    .graphicsLayer {
+                                        if (editMode && !dragging) rotationZ = angle
+                                        if (dragging) {
+                                            scaleX = 1.08f
+                                            scaleY = 1.08f
+                                        }
+                                    }
+                                    .pointerInput(editMode) {
+                                        detectTapGestures {
+                                            if (editMode) saveLayout() else onTile(s)
+                                        }
+                                    }
+                                    .pointerInput(s.id) {
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart = {
+                                                editMode = true
+                                                dragId = s.id
+                                                dragOffset = Offset.Zero
+                                            },
+                                            onDrag = { change, amount ->
+                                                change.consume()
+                                                dragOffset += amount
+                                                val from = order.indexOfFirst { it.id == s.id }
+                                                val i = from - pageStart
+                                                val center = basePos(i) + dragOffset +
+                                                    Offset(cellW / 2f, cellH / 2f)
+                                                val col = ((center.x - spacingPx) / (cellW + spacingPx))
+                                                    .toInt().coerceIn(0, 4)
+                                                val row = ((center.y - spacingPx) / (cellH + spacingPx))
+                                                    .toInt().coerceIn(0, 2)
+                                                val t = (row * 5 + col).coerceAtMost(pageCount - 1)
+                                                if (t != i) {
+                                                    val list = order.toMutableList()
+                                                    list.add(pageStart + t, list.removeAt(from))
+                                                    order = list
+                                                    // Keep the tile under the finger after its
+                                                    // base cell jumps to the new slot.
+                                                    dragOffset += basePos(i) - basePos(t)
+                                                }
+                                            },
+                                            onDragEnd = { dragId = null; dragOffset = Offset.Zero },
+                                            onDragCancel = { dragId = null; dragOffset = Offset.Zero },
+                                        )
+                                    },
+                            )
                         }
                     }
                 }
@@ -793,13 +902,13 @@ private fun StationTile(
     highlighted: Boolean,
     line: String?,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit,
 ) {
-    // Spotify-style tile: square artwork card with the captions below it,
-    // on the page background (per the app_icons.jpg reference design).
+    // Spotify-style tile: square artwork card with the captions below it, on the
+    // page background (per the app_icons.jpg reference design). Tap/drag gestures
+    // are attached by the grid through [modifier].
     val shape = RoundedCornerShape(12.dp)
     Column(
-        modifier.clickable(onClick = onClick),
+        modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(

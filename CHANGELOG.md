@@ -2,6 +2,15 @@
 
 All notable changes to Eeter are documented here.
 
+## v4.3 — 2026-07-06
+
+- Launcher-style tile rearranging on the grid: long-press a station tile and
+  all tiles start wobbling; drag the held tile anywhere and the others shift
+  out of the way. Tap anywhere (a tile or the background) to save the layout
+  and exit. The saved order persists across restarts and also drives the
+  drawer and the playback queue. While rearranging, page swiping is paused
+  and the top bar shows "Move the tiles — tap anywhere to save".
+
 ## v4.2 — 2026-07-06
 
 - Landscape grid is now 5 columns x 3 rows (15 stations per swipe page,
