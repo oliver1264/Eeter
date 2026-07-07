@@ -2,6 +2,16 @@
 
 All notable changes to Eeter are documented here.
 
+## v4.8 — 2026-07-07 (splitscreen branch)
+
+- Split-screen player now actually appears on the head unit: detection uses
+  the real measured window size plus Android's multi-window flag, covering
+  ROMs that misreport dimensions and uneven splits (e.g. a 2/3 pane) that
+  previously fell back to the grid.
+- Stations can be favorited on the head unit at last: heart buttons on every
+  row of the station drawer (works in the All list and search results) and
+  in the split player's top bar. Changes apply to the grid immediately.
+
 ## v4.7 — 2026-07-07 (splitscreen branch)
 
 - Split-screen pane redesigned as an Android-Auto-style now-playing card
