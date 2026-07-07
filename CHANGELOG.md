@@ -2,6 +2,20 @@
 
 All notable changes to Eeter are documented here.
 
+## v4.5 — 2026-07-07
+
+- Sky Plus now-playing fixed while PLAYING the station: v4.1 only wired the
+  new web source into the grid-tile captions; the playback service still
+  skipped kind 5, so the player line showed stale info from the previous
+  station. Now the poller runs during playback too. Note: during live shows
+  Sky Plus publishes the show name (e.g. "SKY PLUS PÄRNUS - @DÜÜN") instead
+  of a song — their own website shows the same text; real artist/track
+  appears whenever they broadcast normal playlist programming.
+- Boot-launch no longer steals the screen from other apps (Waze): the
+  post-boot UI-launch retries now stop permanently after the app window has
+  been shown once. Previously a leftover retry could re-raise Eeter over
+  whatever app the driver had switched to.
+
 ## v4.4 — 2026-07-06
 
 - Edge-hover page flipping while rearranging: hold a dragged tile at the

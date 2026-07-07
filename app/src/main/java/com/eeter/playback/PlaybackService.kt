@@ -85,7 +85,7 @@ class PlaybackService : MediaLibraryService() {
                 val kind = mediaItem?.mediaId
                     ?.let { MediaItems.parseStationId(it) }
                     ?.let { Stations.byId[it]?.nowPlayingKind } ?: 0
-                if (kind in 1..4) nowPlay.start(kind) else nowPlay.stop()
+                if (kind in 1..5) nowPlay.start(kind) else nowPlay.stop()
             }
         })
 
@@ -146,7 +146,7 @@ class PlaybackService : MediaLibraryService() {
         val kind = player.currentMediaItem?.mediaId
             ?.let { MediaItems.parseStationId(it) }
             ?.let { Stations.byId[it]?.nowPlayingKind } ?: 0
-        if (kind in 1..4) return // web poller owns these
+        if (kind in 1..5) return // web poller owns these
         val dash = title.indexOf(" - ")
         if (dash > 0) applyWebMetadata(title.substring(0, dash), title.substring(dash + 3))
         else applyWebMetadata("", title)
@@ -184,13 +184,16 @@ class PlaybackService : MediaLibraryService() {
      * Keep trying to bring up the UI after boot. The boot receiver only lives ~10 s,
      * but this service (kept alive as a foreground media service) can retry across
      * the first minute — head units are often not ready to show apps until well
-     * after BOOT_COMPLETED. Attempts stop as soon as the activity is visible.
+     * after BOOT_COMPLETED. Attempts stop as soon as the activity is visible, and
+     * stop FOR GOOD once it has been shown at all ([MainActivity.shownSinceBoot]):
+     * if the user has since switched to another app (e.g. Waze), a leftover retry
+     * must not steal the screen back.
      */
     private fun scheduleBootUiLaunches() {
         val handler = Handler(Looper.getMainLooper())
         for (t in longArrayOf(3_000, 10_000, 25_000, 45_000, 70_000)) {
             handler.postDelayed({
-                if (!MainActivity.isVisible) {
+                if (!MainActivity.isVisible && !MainActivity.shownSinceBoot) {
                     runCatching {
                         startActivity(
                             Intent(this, MainActivity::class.java)

@@ -166,6 +166,16 @@ class MainActivity : ComponentActivity() {
         @Volatile
         var isVisible = false
             private set
+
+        /**
+         * Set once the window has been shown at all in this process's lifetime and
+         * never cleared. Boot-launch retries stop for good once this is true: after
+         * the app has appeared once, a later retry must not steal the screen back
+         * from whatever the user opened next (e.g. Waze).
+         */
+        @Volatile
+        var shownSinceBoot = false
+            private set
     }
 
     private var controller by mutableStateOf<MediaController?>(null)
@@ -221,6 +231,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         isVisible = true
+        shownSinceBoot = true
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         val future = MediaController.Builder(this, token).buildAsync()
         future.addListener({

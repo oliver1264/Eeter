@@ -68,12 +68,18 @@ class BootReceiver : BroadcastReceiver() {
         val launch = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         handler.postDelayed(
-            { if (!MainActivity.isVisible) runCatching { context.startActivity(launch) } },
+            {
+                if (!MainActivity.isVisible && !MainActivity.shownSinceBoot) {
+                    runCatching { context.startActivity(launch) }
+                }
+            },
             2_000,
         )
         handler.postDelayed(
             {
-                if (!MainActivity.isVisible) runCatching { context.startActivity(launch) }
+                if (!MainActivity.isVisible && !MainActivity.shownSinceBoot) {
+                    runCatching { context.startActivity(launch) }
+                }
                 result.finish()
             },
             7_000,
