@@ -1,6 +1,7 @@
 package com.eeter.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -466,23 +467,32 @@ private fun AppScreen(
                         drawerState.close()
                     }
                 },
+                onToggleFav = { s -> scope.launch { favStore.toggle(s.id) } },
             )
         },
     ) {
         // Wide/landscape displays (e.g. 1920x720 car head units) get a grid of big
         // logo tiles instead of the swipe player: tap plays, the view stays put.
-        val config = LocalConfiguration.current
-        if (config.screenWidthDp > config.screenHeightDp) {
-            // In a split-screen pane (roughly square window, e.g. beside Waze) show an
-            // Android-Auto-style now-playing card instead of the tile grid. The
-            // portrait swipe-pager isn't composed in landscape (its PagerState is
-            // detached and can't scroll), so the shown station is tracked directly:
-            // the user's prev/next choice wins until playback changes (remember key
-            // on currentId), then the view follows the playing station again.
-            // Threshold 1.6: a real split pane is ~1.3 (960x720), the full head-unit
-            // screen is ~2.7 (1920x720); windowed launchers (emulator) sit ~1.8.
-            val ratio = config.screenWidthDp.toFloat() / config.screenHeightDp
-            if (ratio < 1.6f && pages.isNotEmpty()) {
+        // The decision measures the ACTUAL window (BoxWithConstraints), not
+        // LocalConfiguration — head-unit ROMs have been seen reporting full-display
+        // dimensions to apps in split-screen.
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val winRatio = if (constraints.maxHeight > 0) {
+            constraints.maxWidth.toFloat() / constraints.maxHeight
+        } else 99f
+        if (constraints.maxWidth > constraints.maxHeight) {
+            // In a split-screen pane show an Android-Auto-style now-playing card
+            // instead of the tile grid. The portrait swipe-pager isn't composed in
+            // landscape (its PagerState is detached and can't scroll), so the shown
+            // station is tracked directly: the user's prev/next choice wins until
+            // playback changes (remember key on currentId), then the view follows
+            // the playing station again.
+            // Trigger: any multi-window pane up to ~2.2 aspect (a 2/3 split of
+            // 1920x720 is ~1.8), or a roughly square window (< 1.6) on ROMs that
+            // misreport multi-window. Full head-unit screen is ~2.7 -> grid.
+            val inMultiWindow = (LocalContext.current as? Activity)?.isInMultiWindowMode == true
+            val splitPane = winRatio < 1.6f || (inMultiWindow && winRatio < 2.2f)
+            if (splitPane && pages.isNotEmpty()) {
                 var splitIdx by remember(currentId) { mutableIntStateOf(-1) }
                 val autoIdx = when {
                     currentId != null -> pages.indexOfFirst { MediaItems.stationMediaId(it.id) == currentId }
@@ -514,11 +524,14 @@ private fun AppScreen(
                         val c = controller
                         if (isCurrent && c != null && c.isPlaying) c.pause() else onPlay(pageStation, navAll)
                     },
+                    isFavorite = pageStation.id in favSet,
+                    onToggleFav = { scope.launch { favStore.toggle(pageStation.id) } },
                 )
-                return@ModalNavigationDrawer
+                return@BoxWithConstraints
             }
             StationGridScreen(
                 favorites = favorites,
+                windowRatio = winRatio,
                 currentId = currentId,
                 isPlaying = isPlaying,
                 statusLine = if (currentId != null) nowPlayingLine(nowTitle, nowArtist) else null,
@@ -539,11 +552,11 @@ private fun AppScreen(
                 },
                 onSaveOrder = { list -> scope.launch { favStore.setOrder(list.map { it.id }) } },
             )
-            return@ModalNavigationDrawer
+            return@BoxWithConstraints
         }
         if (pages.isEmpty()) {
             Box(Modifier.fillMaxSize().background(DefaultBrand))
-            return@ModalNavigationDrawer
+            return@BoxWithConstraints
         }
         val page = pagerState.currentPage.coerceIn(0, pages.size - 1)
         val pageStation = pages[page]
@@ -568,6 +581,7 @@ private fun AppScreen(
             },
             onToggleFav = { scope.launch { favStore.toggle(pageStation.id) } },
         )
+        } // BoxWithConstraints
     }
 }
 
@@ -593,6 +607,8 @@ private fun SplitPlayerScreen(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onTogglePlay: () -> Unit,
+    isFavorite: Boolean,
+    onToggleFav: () -> Unit,
 ) {
     val brand = rememberDominantColor(station.logoRes, station.brand)
     // Android Auto look: near-black background with a faint tint of the artwork color.
@@ -618,6 +634,13 @@ private fun SplitPlayerScreen(
                     Icon(Icons.Filled.Menu, contentDescription = "Menu", tint = Color.White)
                 }
                 Spacer(Modifier.weight(1f))
+                IconButton(onClick = onToggleFav) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (isFavorite) Color(0xFFE53E63) else Color.White.copy(alpha = 0.8f),
+                    )
+                }
                 OverflowMenu(tint = Color.White, onEqualizer = onOpenEq, onSettings = onOpenSettings, onClose = onClose)
             }
 
@@ -657,9 +680,10 @@ private fun SplitPlayerScreen(
 
                 // Track info + transport controls.
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-                    // Station eyebrow only above a track line — otherwise the big
-                    // title already is the station name and it would just repeat.
-                    if (trackTitle != null) {
+                    // Station eyebrow only above a real track line — otherwise the
+                    // big title already is the station name and it would just repeat
+                    // (a paused item's default metadata title is the station name).
+                    if (trackTitle != null && trackTitle != displayName(station.name)) {
                         Text(
                             text = displayName(station.name).uppercase(),
                             color = Color.White.copy(alpha = 0.6f),
@@ -854,6 +878,7 @@ private val TileColor = Color(0xFF12263F)
 @Composable
 private fun StationGridScreen(
     favorites: List<Station>,
+    windowRatio: Float,
     currentId: String?,
     isPlaying: Boolean,
     statusLine: String?,
@@ -923,11 +948,9 @@ private fun StationGridScreen(
                 OverflowMenu(tint = Color.White, onEqualizer = onOpenEq, onSettings = onOpenSettings, onClose = onClose)
             }
 
-            // Columns adapt to the window shape: 5 across the full 1920x720 head-unit
-            // screen, 3 in a roughly square split-screen pane (e.g. beside Waze).
-            val config = LocalConfiguration.current
-            val cols = ((config.screenWidthDp.toFloat() / config.screenHeightDp) * 1.9f)
-                .roundToInt().coerceIn(2, 5)
+            // Columns adapt to the (measured) window shape: 5 across the full
+            // 1920x720 head-unit screen, fewer in narrower windows.
+            val cols = (windowRatio * 1.9f).roundToInt().coerceIn(2, 5)
             val pageSize = cols * 3
             val gridPages = remember(order, pageSize) { order.chunked(pageSize) }
             val gridPager = rememberPagerState(pageCount = { gridPages.size })
@@ -1373,12 +1396,14 @@ private fun StationDrawer(
     favorites: List<Station>,
     currentId: String?,
     onSelect: (Station, Boolean) -> Unit,
+    onToggleFav: (Station) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     val q = query.trim().lowercase()
     fun matches(s: Station) = q.isEmpty() || displayName(s.name).lowercase().contains(q)
     val recommended = favorites.filter(::matches)
     val all = Stations.all.filter(::matches)
+    val favIds = favorites.map { it.id }.toSet()
 
     ModalDrawerSheet(
         drawerContainerColor = DrawerColor,
@@ -1389,9 +1414,13 @@ private fun StationDrawer(
             SearchField(query = query, onChange = { query = it })
             LazyColumn(Modifier.weight(1f)) {
                 item { DrawerSection(icon = Icons.Filled.Star, label = "Favorites") }
-                items(recommended, key = { "r${it.id}" }) { s -> DrawerRow(s, currentId) { onSelect(s, false) } }
+                items(recommended, key = { "r${it.id}" }) { s ->
+                    DrawerRow(s, currentId, isFavorite = true, onClick = { onSelect(s, false) }, onToggleFav = { onToggleFav(s) })
+                }
                 item { DrawerSection(icon = Icons.AutoMirrored.Filled.List, label = "All") }
-                items(all, key = { "a${it.id}" }) { s -> DrawerRow(s, currentId) { onSelect(s, true) } }
+                items(all, key = { "a${it.id}" }) { s ->
+                    DrawerRow(s, currentId, isFavorite = s.id in favIds, onClick = { onSelect(s, true) }, onToggleFav = { onToggleFav(s) })
+                }
             }
         }
     }
@@ -1433,17 +1462,35 @@ private fun DrawerSection(icon: androidx.compose.ui.graphics.vector.ImageVector,
 }
 
 @Composable
-private fun DrawerRow(station: Station, currentId: String?, onClick: () -> Unit) {
+private fun DrawerRow(
+    station: Station,
+    currentId: String?,
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    onToggleFav: () -> Unit,
+) {
     val isCurrent = currentId == MediaItems.stationMediaId(station.id)
-    Text(
-        text = displayName(station.name),
-        color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.White,
-        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.fillMaxWidth().clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-    )
+    Row(
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(start = 16.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = displayName(station.name),
+            color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.White,
+            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(vertical = 16.dp),
+        )
+        IconButton(onClick = onToggleFav) {
+            Icon(
+                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                tint = if (isFavorite) Color(0xFFE53E63) else Color.White.copy(alpha = 0.5f),
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
