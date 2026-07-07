@@ -2,6 +2,15 @@
 
 All notable changes to Eeter are documented here.
 
+## v4.7 — 2026-07-07 (splitscreen branch)
+
+- Split-screen pane redesigned as an Android-Auto-style now-playing card
+  (replaces v4.6's shrunken tile grid): artwork on the left; station, track
+  title and artist on the right; previous / play-pause / next controls
+  centered at the bottom, on a dark brand-tinted background. Skipping while
+  playing switches stations immediately; the hamburger menu still opens the
+  station drawer for direct picking. Fullscreen keeps the 5-column grid.
+
 ## v4.6 — 2026-07-07
 
 - Split-screen support, for running Eeter side by side with Waze (Android

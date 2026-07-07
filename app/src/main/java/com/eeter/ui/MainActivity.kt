@@ -46,6 +46,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -71,6 +72,8 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -470,6 +473,50 @@ private fun AppScreen(
         // logo tiles instead of the swipe player: tap plays, the view stays put.
         val config = LocalConfiguration.current
         if (config.screenWidthDp > config.screenHeightDp) {
+            // In a split-screen pane (roughly square window, e.g. beside Waze) show an
+            // Android-Auto-style now-playing card instead of the tile grid. The
+            // portrait swipe-pager isn't composed in landscape (its PagerState is
+            // detached and can't scroll), so the shown station is tracked directly:
+            // the user's prev/next choice wins until playback changes (remember key
+            // on currentId), then the view follows the playing station again.
+            // Threshold 1.6: a real split pane is ~1.3 (960x720), the full head-unit
+            // screen is ~2.7 (1920x720); windowed launchers (emulator) sit ~1.8.
+            val ratio = config.screenWidthDp.toFloat() / config.screenHeightDp
+            if (ratio < 1.6f && pages.isNotEmpty()) {
+                var splitIdx by remember(currentId) { mutableIntStateOf(-1) }
+                val autoIdx = when {
+                    currentId != null -> pages.indexOfFirst { MediaItems.stationMediaId(it.id) == currentId }
+                    else -> pages.indexOfFirst { it.id == startStationId }
+                }
+                val page = (if (splitIdx >= 0) splitIdx else autoIdx).coerceIn(0, pages.size - 1)
+                val pageStation = pages[page]
+                val isCurrent = currentId == MediaItems.stationMediaId(pageStation.id)
+                fun skipTo(target: Int) {
+                    splitIdx = target
+                    // Skipping while playing switches the audio immediately (AA-style).
+                    if (isPlaying) onPlay(pages[target], navAll)
+                }
+                SplitPlayerScreen(
+                    station = pageStation,
+                    isPlaying = isPlaying && isCurrent,
+                    // Only caption the shown station with the live song; a paused
+                    // session's stale line must not appear under another station.
+                    statusLine = if (isCurrent && currentId != null) nowPlayingLine(nowTitle, nowArtist) else null,
+                    hasPrev = page > 0,
+                    hasNext = page < pages.size - 1,
+                    onMenu = { scope.launch { drawerState.open() } },
+                    onOpenEq = { showEq = true },
+                    onOpenSettings = { showSettings = true },
+                    onClose = onClose,
+                    onPrev = { if (page > 0) skipTo(page - 1) },
+                    onNext = { if (page < pages.size - 1) skipTo(page + 1) },
+                    onTogglePlay = {
+                        val c = controller
+                        if (isCurrent && c != null && c.isPlaying) c.pause() else onPlay(pageStation, navAll)
+                    },
+                )
+                return@ModalNavigationDrawer
+            }
             StationGridScreen(
                 favorites = favorites,
                 currentId = currentId,
@@ -521,6 +568,169 @@ private fun AppScreen(
             },
             onToggleFav = { scope.launch { favStore.toggle(pageStation.id) } },
         )
+    }
+}
+
+/**
+ * Android-Auto-style now-playing screen for a split-screen pane (shown when the
+ * window is landscape but roughly square, e.g. half of a 1920x720 display beside
+ * Waze): artwork card on the left; station, track and artist on the right with
+ * previous / play-pause / next transport controls underneath, on a dark
+ * brand-tinted background. Station switching, autoplay-on-skip and following the
+ * media notification all reuse the swipe player's pager state.
+ */
+@Composable
+private fun SplitPlayerScreen(
+    station: Station,
+    isPlaying: Boolean,
+    statusLine: String?,
+    hasPrev: Boolean,
+    hasNext: Boolean,
+    onMenu: () -> Unit,
+    onOpenEq: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onClose: () -> Unit,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onTogglePlay: () -> Unit,
+) {
+    val brand = rememberDominantColor(station.logoRes, station.brand)
+    // Android Auto look: near-black background with a faint tint of the artwork color.
+    val bg = lerp(brand, Color(0xFF0D0D0F), 0.82f)
+
+    // The service folds the song into a single "Artist - Title" line; split it back
+    // up for the two-line Android Auto layout.
+    val dash = statusLine?.indexOf(" - ") ?: -1
+    val trackTitle = when {
+        statusLine == null -> null
+        dash > 0 -> statusLine.substring(dash + 3)
+        else -> statusLine
+    }
+    val trackArtist = if (statusLine != null && dash > 0) statusLine.substring(0, dash) else null
+
+    Box(Modifier.fillMaxSize().background(bg)) {
+        Column(Modifier.fillMaxSize().systemBarsPadding()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onMenu) {
+                    Icon(Icons.Filled.Menu, contentDescription = "Menu", tint = Color.White)
+                }
+                Spacer(Modifier.weight(1f))
+                OverflowMenu(tint = Color.White, onEqualizer = onOpenEq, onSettings = onOpenSettings, onClose = onClose)
+            }
+
+            Row(
+                Modifier.weight(1f).fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Artwork card.
+                Box(
+                    Modifier
+                        .fillMaxHeight(0.78f)
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(TileColor),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (station.logoRes != 0) {
+                        AsyncImage(
+                            model = station.logoRes,
+                            contentDescription = displayName(station.name),
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize().padding(10.dp),
+                        )
+                    } else {
+                        Text(
+                            text = displayName(station.name),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.width(24.dp))
+
+                // Track info + transport controls.
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                    // Station eyebrow only above a track line — otherwise the big
+                    // title already is the station name and it would just repeat.
+                    if (trackTitle != null) {
+                        Text(
+                            text = displayName(station.name).uppercase(),
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 1.2.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Text(
+                        text = trackTitle ?: displayName(station.name),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 26.sp,
+                        maxLines = 1,
+                        modifier = Modifier.fillMaxWidth().basicMarquee(),
+                    )
+                    if (trackArtist != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = trackArtist,
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 18.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+
+            // Transport controls: full-width bottom strip, centered (like Android
+            // Auto's narrow-pane layout — also keeps them clear of the text column).
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 18.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onPrev, enabled = hasPrev, modifier = Modifier.size(56.dp)) {
+                    Icon(
+                        Icons.Filled.SkipPrevious,
+                        contentDescription = "Previous station",
+                        tint = Color.White.copy(alpha = if (hasPrev) 1f else 0.3f),
+                        modifier = Modifier.size(42.dp),
+                    )
+                }
+                Spacer(Modifier.width(28.dp))
+                Box(
+                    Modifier.size(76.dp).clip(CircleShape).background(Color.White)
+                        .clickable(onClick = onTogglePlay),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = "Play/Pause",
+                        tint = bg,
+                        modifier = Modifier.size(44.dp),
+                    )
+                }
+                Spacer(Modifier.width(28.dp))
+                IconButton(onClick = onNext, enabled = hasNext, modifier = Modifier.size(56.dp)) {
+                    Icon(
+                        Icons.Filled.SkipNext,
+                        contentDescription = "Next station",
+                        tint = Color.White.copy(alpha = if (hasNext) 1f else 0.3f),
+                        modifier = Modifier.size(42.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
