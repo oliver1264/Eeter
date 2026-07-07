@@ -713,8 +713,13 @@ private fun StationGridScreen(
                 OverflowMenu(tint = Color.White, onEqualizer = onOpenEq, onSettings = onOpenSettings, onClose = onClose)
             }
 
-            // 15 tiles (5x3) per page; extra favorites go onto further swipe pages.
-            val gridPages = remember(order) { order.chunked(15) }
+            // Columns adapt to the window shape: 5 across the full 1920x720 head-unit
+            // screen, 3 in a roughly square split-screen pane (e.g. beside Waze).
+            val config = LocalConfiguration.current
+            val cols = ((config.screenWidthDp.toFloat() / config.screenHeightDp) * 1.9f)
+                .roundToInt().coerceIn(2, 5)
+            val pageSize = cols * 3
+            val gridPages = remember(order, pageSize) { order.chunked(pageSize) }
             val gridPager = rememberPagerState(pageCount = { gridPages.size })
 
             // Caption every tile with that station's current song. The playing station
@@ -740,24 +745,24 @@ private fun StationGridScreen(
             // it (edge hover), which would be impossible if they lived inside a page.
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 val spacingPx = with(LocalDensity.current) { spacing.toPx() }
-                val cellW = (constraints.maxWidth - spacingPx * 6) / 5f
+                val cellW = (constraints.maxWidth - spacingPx * (cols + 1)) / cols.toFloat()
                 val cellH = (constraints.maxHeight - spacingPx * 4) / 3f
                 val cellSize = with(LocalDensity.current) { DpSize(cellW.toDp(), cellH.toDp()) }
                 fun basePos(i: Int) = Offset(
-                    spacingPx + (i % 5) * (cellW + spacingPx),
-                    spacingPx + (i / 5) * (cellH + spacingPx),
+                    spacingPx + (i % cols) * (cellW + spacingPx),
+                    spacingPx + (i / cols) * (cellH + spacingPx),
                 )
                 fun cellIndexAt(pos: Offset): Int {
-                    val col = ((pos.x - spacingPx) / (cellW + spacingPx)).toInt().coerceIn(0, 4)
+                    val col = ((pos.x - spacingPx) / (cellW + spacingPx)).toInt().coerceIn(0, cols - 1)
                     val row = ((pos.y - spacingPx) / (cellH + spacingPx)).toInt().coerceIn(0, 2)
-                    return row * 5 + col
+                    return row * cols + col
                 }
                 // Moves the dragged station to the cell under the finger on the page
                 // currently shown (no-op while the pager is still animating a flip).
                 fun hoverReorder() {
                     val id = dragId ?: return
                     if (gridPager.isScrollInProgress) return
-                    val pageStart = gridPager.settledPage * 15
+                    val pageStart = gridPager.settledPage * pageSize
                     if (pageStart >= order.size) return
                     val from = order.indexOfFirst { it.id == id }
                     val t = (pageStart + cellIndexAt(dragPos)).coerceAtMost(order.size - 1)
@@ -774,11 +779,13 @@ private fun StationGridScreen(
                     userScrollEnabled = dragId == null,
                     modifier = Modifier
                         .fillMaxSize()
-                        .pointerInput(Unit) {
+                        // Keyed on cellW so the captured grid geometry resets when the
+                        // window is resized (entering/leaving split screen).
+                        .pointerInput(cellW) {
                             detectDragGesturesAfterLongPress(
                                 onDragStart = { off ->
                                     if (gridPager.isScrollInProgress) return@detectDragGesturesAfterLongPress
-                                    val pageStart = gridPager.settledPage * 15
+                                    val pageStart = gridPager.settledPage * pageSize
                                     val i = cellIndexAt(off)
                                     if (pageStart + i < order.size) {
                                         editMode = true
@@ -798,7 +805,7 @@ private fun StationGridScreen(
                             )
                         },
                 ) { p ->
-                    val pageStart = p * 15
+                    val pageStart = p * pageSize
                     val pageCount = gridPages[p].size
                     Box(
                         Modifier.fillMaxSize().pointerInput(editMode) {
@@ -1029,16 +1036,34 @@ private fun StationTile(
 @Composable
 private fun OverflowMenu(tint: Color, onEqualizer: () -> Unit, onSettings: () -> Unit, onClose: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     Box {
         IconButton(onClick = { expanded = true }) {
             Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = tint)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(text = { Text("Open Waze") }, onClick = { expanded = false; openWaze(context) })
             DropdownMenuItem(text = { Text("Equalizer") }, onClick = { expanded = false; onEqualizer() })
             DropdownMenuItem(text = { Text("Settings") }, onClick = { expanded = false; onSettings() })
             DropdownMenuItem(text = { Text("Close application") }, onClick = { expanded = false; onClose() })
         }
     }
+}
+
+/**
+ * Opens Waze next to Eeter. FLAG_ACTIVITY_LAUNCH_ADJACENT puts it in the other
+ * split-screen pane when the device is already in split-screen mode; otherwise it
+ * simply opens Waze (Android offers no public API to force split-screen — that
+ * first split is done once through the system UI, e.g. recents > Split screen).
+ */
+private fun openWaze(context: Context) {
+    val launch = context.packageManager.getLaunchIntentForPackage("com.waze")
+    if (launch == null) {
+        Toast.makeText(context, "Waze is not installed", Toast.LENGTH_SHORT).show()
+        return
+    }
+    launch.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(launch) }
 }
 
 /** System media volume mirrored into Compose state, with a setter. */

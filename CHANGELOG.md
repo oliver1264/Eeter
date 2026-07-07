@@ -2,6 +2,18 @@
 
 All notable changes to Eeter are documented here.
 
+## v4.6 — 2026-07-07
+
+- Split-screen support, for running Eeter side by side with Waze (Android
+  Auto style). The app is declared resizeable, the grid adapts its column
+  count to the window shape (5 columns fullscreen, 3 in a roughly square
+  split pane), and the overflow menu gained "Open Waze", which launches Waze
+  into the adjacent pane when split-screen is active. Note: Android offers
+  no way for an app to force split-screen — enter it once via the system UI
+  (long-press the app in recents > Split screen); after that the pairing is
+  quick to restore. (Waze's own in-app audio player was investigated first:
+  it is a closed partner program, not integratable for a sideloaded app.)
+
 ## v4.5 — 2026-07-07
 
 - Sky Plus now-playing fixed while PLAYING the station: v4.1 only wired the
